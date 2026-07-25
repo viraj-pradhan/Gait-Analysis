@@ -42,14 +42,16 @@ async def run_analysis_job(
     Run the full gait analysis pipeline as an async background task.
     Updates MongoDB with status and progress.
     """
-    col = jobs_col()
-
     try:
         # Mark as processing
-        await col.update_one(
-            {"_id": job_id},
-            {"$set": {"status": "processing", "started_at": datetime.now(timezone.utc).isoformat()}},
-        )
+        try:
+            await jobs_col().update_one(
+                {"_id": job_id},
+                {"$set": {"status": "processing", "started_at": datetime.now(timezone.utc).isoformat()}},
+            )
+        except Exception as dbe:
+            print(f"⚠ MongoDB update_one skipped: {dbe}")
+
         _progress[job_id] = 5
 
         # Lazy import — only when we actually need to run analysis
@@ -80,21 +82,24 @@ async def run_analysis_job(
         session_dir = result.get("session_dir", "")
         session_id = result.get("session_id", "")
 
-        await col.update_one(
-            {"_id": job_id},
-            {"$set": {
-                "status": "completed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "session_id": session_id,
-                "session_dir": session_dir,
-                "result": {
-                    "video": result.get("video_path", ""),
-                    "xlsx": result.get("xlsx_path", ""),
-                    "docx": result.get("docx_path", ""),
+        try:
+            await jobs_col().update_one(
+                {"_id": job_id},
+                {"$set": {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
                     "session_id": session_id,
-                },
-            }},
-        )
+                    "session_dir": session_dir,
+                    "result": {
+                        "video": result.get("video_path", ""),
+                        "xlsx": result.get("xlsx_path", ""),
+                        "docx": result.get("docx_path", ""),
+                        "session_id": session_id,
+                    },
+                }},
+            )
+        except Exception as dbe:
+            print(f"⚠ MongoDB update_one skipped: {dbe}")
 
     except Exception as e:
         traceback.print_exc()
