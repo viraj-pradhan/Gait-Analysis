@@ -1,0 +1,33 @@
+services:
+  # FastAPI Python Backend Web Service
+  - type: web
+    name: gait-analysis-backend
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn fastapi_app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: DB_NAME
+        value: gait_analysis
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: https://gait-analysis-frontend.onrender.com,http://localhost:3000
+
+  # Next.js Node Frontend Web Service
+  - type: web
+    name: gait-analysis-frontend
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: gait-analysis-backend
+          property: url
