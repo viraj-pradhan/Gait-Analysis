@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
-import { getToken, listSessions, getStaticUrl, updateSessionPatientName } from '@/lib/api'
+import { getToken, listSessions, getStaticUrl, updateSessionPatientName, deleteSession } from '@/lib/api'
 import { getConfidenceTier } from '@/lib/badges'
 import { getPatientSlug } from '@/lib/session-utils'
 import { 
@@ -15,7 +15,8 @@ import {
   Pencil, 
   Check, 
   X,
-  Sparkles
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 
 type SessionEntry = {
@@ -36,26 +37,32 @@ type SessionEntry = {
   report_docx: string
 }
 
-export default function ReportsPage() {
+export default function ReportsDashboardPage() {
   const router = useRouter()
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
 
   // Patient Name Editing State
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editNameValue, setEditNameValue] = useState('')
   const [savingName, setSavingName] = useState(false)
 
+  // Deletion Modal State
+  const [deleteModalState, setDeleteModalState] = useState<{
+    sessionId: string
+    sessionLabel: string
+  } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
   useEffect(() => {
     if (!getToken()) {
       router.replace('/login')
       return
     }
-    fetchSessions()
+    fetchData()
   }, [router])
 
-  async function fetchSessions() {
+  async function fetchData() {
     try {
       const data = await listSessions()
       setSessions(data)
@@ -73,7 +80,7 @@ export default function ReportsPage() {
     try {
       await updateSessionPatientName(datePart, sessionPart, editNameValue.trim())
       setEditingSessionId(null)
-      await fetchSessions()
+      await fetchData()
     } catch (err: any) {
       alert(err.message || 'Failed to update patient name')
     } finally {
@@ -81,78 +88,69 @@ export default function ReportsPage() {
     }
   }
 
-  const reportsList = sessions.filter(s => s.report_docx && s.status === 'success')
+  async function handleConfirmDelete() {
+    if (!deleteModalState?.sessionId) return
+    setDeleting(true)
+    try {
+      const [datePart, sessionPart] = deleteModalState.sessionId.split('/')
+      await deleteSession(datePart, sessionPart)
+      setSessions((prev) => prev.filter((s) => s.session_id !== deleteModalState.sessionId))
+      setDeleteModalState(null)
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete report session')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
-  reportsList.sort((a, b) => {
-    const da = a.date || a.recorded_date || ''
-    const db = b.date || b.recorded_date || ''
-    return sortOrder === 'desc' ? db.localeCompare(da) : da.localeCompare(db)
-  })
+  const validSessions = sessions.filter((s) => s.status === 'success')
 
   return (
     <AppShell>
-      <div className="space-y-6 font-sans">
-        {/* Banner Header */}
-        <div className="bg-[#FFFFFF] p-[24px] rounded-[8px] border border-[#E5E5E7] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="space-y-6 font-sans antialiased text-[#1D1D1F]">
+        
+        {/* Standard Single Page Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-[#E7F5EA] text-[#0B6E4F] text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-[#0B6E4F]/20 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Clinical Documentation
-              </span>
-            </div>
-            <h1 className="text-[20px] font-[600] text-[#1D1D1F] tracking-tight">Clinical Reports & Documentation</h1>
-            <p className="text-[13px] font-[400] text-[#6E6E73] mt-[2px]">Downloadable Word (.docx) gait biomechanics reports for clinical recordkeeping</p>
+            <h1 className="text-[20px] font-[600] text-[#1D1D1F] tracking-tight">Clinical Reports</h1>
+            <p className="text-[13px] font-[400] text-[#6E6E73] mt-[2px]">
+              Downloadable Word documents & structured biomechanics evaluations
+            </p>
           </div>
         </div>
 
-        {/* Sort Control Row — Flush Right Above Grid (32px Height) */}
-        <div className="flex items-center justify-between">
-          <div className="text-[13px] font-[500] text-[#6E6E73]">
-            {reportsList.length} {reportsList.length === 1 ? 'Report' : 'Reports'} Available
-          </div>
-
-          <button
-            onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-            className="h-[32px] px-[12px] bg-[#FFFFFF] border border-[#E5E5E7] rounded-[6px] text-[13px] font-[500] text-[#1D1D1F] hover:bg-[#FAFAFA] transition-colors flex items-center gap-[6px] shrink-0 cursor-pointer"
-          >
-            <Calendar className="w-[14px] h-[14px] text-[#6E6E73]" />
-            <span>Sort Date ({sortOrder.toUpperCase()})</span>
-          </button>
-        </div>
-
-        {/* Reports 2-Column Bounded Card Grid */}
+        {/* 2-Column Bounded Card Grid (16px Gap) */}
         {loading ? (
-          <div className="p-12 text-center text-[13px] text-[#6E6E73]">Loading clinical reports list…</div>
-        ) : reportsList.length === 0 ? (
+          <div className="p-12 text-center text-[13px] text-[#6E6E73]">Loading reports…</div>
+        ) : validSessions.length === 0 ? (
           <div className="bg-[#FFFFFF] p-12 text-center rounded-[8px] border border-[#E5E5E7]">
             <FileText className="w-8 h-8 text-[#6E6E73] mx-auto mb-2 opacity-50" />
             <p className="text-[14px] font-[600] text-[#1D1D1F]">No generated reports found</p>
-            <p className="text-[13px] font-[400] text-[#6E6E73] mt-1">Upload a gait recording to generate clinical reports</p>
+            <p className="text-[13px] font-[400] text-[#6E6E73] mt-1">Upload a gait evaluation to generate clinical reports</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-[16px]">
-            {reportsList.map((r) => {
-              const tier = getConfidenceTier(r.mean_confidence)
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-[16px]">
+            {validSessions.map((r) => {
               const [datePart, sessionPart] = r.session_id.split('/')
+              const tier = getConfidenceTier(r.mean_confidence)
               const isEditing = editingSessionId === r.session_id
 
               const hasRealName = r.patient_name && r.patient_name !== 'Unknown Patient'
-              const patientDisplayName = hasRealName ? r.patient_name! : 'Unassigned'
+              const patientDisplayName = hasRealName ? r.patient_name! : 'Unassigned Patient'
 
               return (
-                <div 
-                  key={r.session_id} 
-                  className="bg-[#FFFFFF] p-[20px] rounded-[8px] border border-[#E5E5E7] flex flex-col justify-between"
+                <div
+                  key={r.session_id}
+                  className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] p-[20px] shadow-xs flex flex-col justify-between"
                 >
                   <div>
-                    {/* Card Header Row (36px Height) */}
-                    <div className="h-[36px] flex items-center justify-between">
-                      {/* Left: Avatar + Name + Edit Pencil */}
-                      <div className="flex items-center gap-[12px] min-w-0">
-                        <div className="w-[28px] h-[28px] rounded-[6px] bg-[#E7F5EA] text-[#0B6E4F] flex items-center justify-center font-bold text-xs shrink-0">
-                          <User className="w-[14px] h-[14px]" />
+                    {/* Top Row: Patient Avatar + Name/Edit + Confidence Badge */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-[10px] min-w-0">
+                        <div className="w-[32px] h-[32px] rounded-[6px] bg-[#E7F5EA] text-[#0B6E4F] flex items-center justify-center font-bold text-xs shrink-0">
+                          <User className="w-[16px] h-[16px]" />
                         </div>
-                        
+
                         {isEditing ? (
                           <div className="flex items-center gap-1">
                             <input
@@ -163,14 +161,16 @@ export default function ReportsPage() {
                               autoFocus
                             />
                             <button
+                              type="button"
                               onClick={() => handleSavePatientName(r.session_id)}
                               disabled={savingName}
                               className="w-[28px] h-[28px] rounded-[4px] bg-[#0B6E4F] text-white flex items-center justify-center hover:opacity-90 cursor-pointer"
-                              title="Save Patient Name"
+                              title="Save"
                             >
                               <Check className="w-[14px] h-[14px]" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => setEditingSessionId(null)}
                               className="w-[28px] h-[28px] rounded-[4px] bg-[#E5E5E7] text-[#1D1D1F] flex items-center justify-center hover:bg-[#d0d0d2] cursor-pointer"
                               title="Cancel"
@@ -179,7 +179,7 @@ export default function ReportsPage() {
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-center gap-[12px] min-w-0">
+                          <div className="flex items-center gap-[8px] min-w-0">
                             <Link
                               href={`/patients/${getPatientSlug(r.patient_name)}`}
                               className={`text-[14px] font-[600] hover:underline truncate ${hasRealName ? 'text-[#1D1D1F]' : 'text-[#6E6E73] italic'}`}
@@ -187,14 +187,15 @@ export default function ReportsPage() {
                               {patientDisplayName}
                             </Link>
                             <button
+                              type="button"
                               onClick={() => {
                                 setEditingSessionId(r.session_id)
                                 setEditNameValue(hasRealName ? r.patient_name! : '')
                               }}
-                              className="w-[28px] h-[28px] flex items-center justify-center text-[#6E6E73] hover:text-[#0B6E4F] transition-colors rounded-[4px] hover:bg-[#FAFAFA] cursor-pointer shrink-0"
+                              className="w-[24px] h-[24px] flex items-center justify-center text-[#6E6E73] hover:text-[#0B6E4F] transition-colors rounded-[4px] hover:bg-[#FAFAFA] cursor-pointer shrink-0"
                               title={hasRealName ? "Edit patient name" : "Assign patient name"}
                             >
-                              <Pencil className="w-[14px] h-[14px]" />
+                              <Pencil className="w-[12px] h-[12px]" />
                             </button>
                           </div>
                         )}
@@ -214,7 +215,7 @@ export default function ReportsPage() {
                       Session {r.session_number} — {r.recorded_date || r.date}
                     </div>
 
-                    {/* 2x2 Stat Grid (12px gap, 16px mt) */}
+                    {/* 2x2 Stat Grid */}
                     <div className="grid grid-cols-2 gap-[12px] mt-[16px] p-[12px] bg-[#FAFAFA] border border-[#E5E5E7] rounded-[6px]">
                       <div>
                         <span className="text-[11px] font-[500] uppercase tracking-[0.02em] text-[#6E6E73] block">Date & Time</span>
@@ -246,7 +247,7 @@ export default function ReportsPage() {
                     </div>
                   </div>
 
-                  {/* Action Row (16px mt, 8px gap) */}
+                  {/* Action Row */}
                   <div className="flex items-center gap-[8px] mt-[16px]">
                     <a
                       href={getStaticUrl(r.report_docx)}
@@ -261,13 +262,63 @@ export default function ReportsPage() {
                       href={`/sessions/${datePart}/${sessionPart}`}
                       className="h-[36px] px-[12px] bg-[#FFFFFF] border border-[#E5E5E7] hover:bg-[#FAFAFA] text-[#1D1D1F] rounded-[6px] text-[13px] font-[500] flex items-center justify-center gap-[4px] transition-all cursor-pointer shrink-0"
                     >
-                      <span>View Details & Graphs</span>
+                      <span>View Details</span>
                       <ChevronRight className="w-[14px] h-[14px] text-[#6E6E73]" />
                     </Link>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        setDeleteModalState({
+                          sessionId: r.session_id,
+                          sessionLabel: `${patientDisplayName} — Session ${r.session_number} (${r.recorded_date || r.date})`,
+                        })
+                      }}
+                      className="w-[36px] h-[36px] rounded-[6px] border border-[#E5E5E7] bg-[#FFFFFF] flex items-center justify-center text-[#6E6E73] hover:text-[#B3261E] hover:bg-[#FCEAE9] hover:border-[#B3261E]/30 transition-colors cursor-pointer shrink-0"
+                      title="Delete session report"
+                    >
+                      <Trash2 className="w-[16px] h-[16px]" />
+                    </button>
                   </div>
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteModalState && (
+          <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] w-full max-w-[360px] p-[24px] shadow-xl space-y-4 font-sans">
+              <div className="flex items-center gap-2 text-[#B3261E]">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="text-[16px] font-[600] text-[#1D1D1F]">Delete this session report?</h3>
+              </div>
+
+              <p className="text-[13px] font-[400] text-[#6E6E73] leading-relaxed">
+                This permanently deletes <strong>{deleteModalState.sessionLabel}</strong>'s video, generated report, and telemetry data. This can't be undone.
+              </p>
+
+              <div className="flex items-center justify-end gap-[8px] pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalState(null)}
+                  disabled={deleting}
+                  className="h-[36px] px-[14px] bg-[#FFFFFF] border border-[#E5E5E7] hover:bg-[#FAFAFA] rounded-[6px] text-[13px] font-[500] text-[#1D1D1F] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                  className="h-[36px] px-[16px] bg-[#B3261E] hover:opacity-90 rounded-[6px] text-[13px] font-[500] text-white cursor-pointer transition-all"
+                >
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
