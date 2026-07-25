@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/AppShell'
 import { StatCard } from '@/components/ui/StatCard'
 import { RecoveryTrendChart } from '@/components/charts/RecoveryTrendChart'
-import { getToken, listSessions, updateSessionPatientName } from '@/lib/api'
-import { buildTrendChartData, type SessionEntry } from '@/lib/session-utils'
+import { getToken, listSessions, updateSessionPatientName, deleteSession } from '@/lib/api'
+import { buildTrendChartData, getPatientSlug, type SessionEntry } from '@/lib/session-utils'
 import { getConfidenceTier } from '@/lib/badges'
 import { 
   Activity, 
@@ -17,7 +17,9 @@ import {
   Search, 
   Pencil, 
   Check, 
-  X
+  X,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 
 export default function SessionsDashboardPage() {
@@ -34,6 +36,13 @@ export default function SessionsDashboardPage() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editNameValue, setEditNameValue] = useState('')
   const [savingName, setSavingName] = useState(false)
+
+  // Deletion Modal State
+  const [deleteModalState, setDeleteModalState] = useState<{
+    sessionId: string
+    sessionLabel: string
+  } | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -70,6 +79,22 @@ export default function SessionsDashboardPage() {
     }
   }
 
+  async function handleConfirmDelete() {
+    if (!deleteModalState?.sessionId) return
+    setDeleting(true)
+    try {
+      const [datePart, sessionPart] = deleteModalState.sessionId.split('/')
+      await deleteSession(datePart, sessionPart)
+      // Immediately remove from local state
+      setSessions((prev) => prev.filter((s) => s.session_id !== deleteModalState.sessionId))
+      setDeleteModalState(null)
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete session')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const validSessions = sessions.filter(s => s.status === 'success')
   const totalSessions = sessions.length
   const avgCadence = validSessions.length > 0 
@@ -97,7 +122,7 @@ export default function SessionsDashboardPage() {
     return true
   })
 
-  // Trend chart data (uses Session N — YYYY-MM-DD for X-axis)
+  // Trend chart data
   const chartData = buildTrendChartData(sessions)
 
   return (
@@ -158,7 +183,7 @@ export default function SessionsDashboardPage() {
             </div>
 
             <div className="flex flex-col gap-[12px]">
-              {/* Search input (36px Height, 6px Radius, Icon at 12px) */}
+              {/* Search input */}
               <div className="relative">
                 <Search className="w-[14px] h-[14px] text-[#6E6E73] absolute left-[12px] top-1/2 -translate-y-1/2" />
                 <input
@@ -170,13 +195,14 @@ export default function SessionsDashboardPage() {
                 />
               </div>
 
-              {/* Quality Filter Pills (28px Height, 6px Radius, Active Accent Color #0B6E4F) */}
+              {/* Quality Filter Pills */}
               <div className="flex items-center gap-[8px]">
                 {(['all', 'good', 'fair', 'low'] as const).map((q) => {
                   const isActive = filterQuality === q
                   return (
                     <button
                       key={q}
+                      type="button"
                       onClick={() => setFilterQuality(q)}
                       className={`h-[28px] px-[12px] py-[4px] rounded-[6px] text-[12px] font-[500] capitalize transition-all cursor-pointer ${
                         isActive
@@ -231,6 +257,7 @@ export default function SessionsDashboardPage() {
                               autoFocus
                             />
                             <button
+                              type="button"
                               onClick={() => handleSavePatientName(s.session_id)}
                               disabled={savingName}
                               className="w-[28px] h-[28px] rounded-[4px] bg-[#0B6E4F] text-white flex items-center justify-center hover:opacity-90 cursor-pointer"
@@ -239,6 +266,7 @@ export default function SessionsDashboardPage() {
                               <Check className="w-[14px] h-[14px]" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => setEditingSessionId(null)}
                               className="w-[28px] h-[28px] rounded-[4px] bg-[#E5E5E7] text-[#1D1D1F] flex items-center justify-center hover:bg-[#d0d0d2] cursor-pointer"
                               title="Cancel"
@@ -249,12 +277,16 @@ export default function SessionsDashboardPage() {
                         ) : (
                           <div className="flex items-center gap-[8px] min-w-0">
                             <Link
-                              href={`/sessions/${datePart}/${sessionPart}`}
+                              href={`/patients/${getPatientSlug(s.patient_name)}`}
                               className="text-[14px] font-[600] text-[#1D1D1F] hover:text-[#0B6E4F] hover:underline truncate"
                             >
-                              {patientDisplayName} — Session {s.session_number}
+                              {patientDisplayName}
                             </Link>
+                            <span className="text-[14px] font-[600] text-[#6E6E73]">
+                              — Session {s.session_number}
+                            </span>
                             <button
+                              type="button"
                               onClick={() => {
                                 setEditingSessionId(s.session_id)
                                 setEditNameValue(hasRealName ? s.patient_name! : '')
@@ -273,7 +305,7 @@ export default function SessionsDashboardPage() {
                       </div>
                     </div>
 
-                    {/* Right: Badge + View Details Link */}
+                    {/* Right: Badge + Trash Delete Icon + View Details Link */}
                     <div className="flex items-center gap-[12px] shrink-0">
                       <span 
                         className="text-[11px] font-[500] px-[8px] py-[2px] rounded-[4px]"
@@ -282,12 +314,29 @@ export default function SessionsDashboardPage() {
                         {tier.fullLabel}
                       </span>
 
+                      {/* Trash Delete Icon Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          e.preventDefault()
+                          setDeleteModalState({
+                            sessionId: s.session_id,
+                            sessionLabel: `${patientDisplayName} — Session ${s.session_number} (${s.recorded_date || s.date})`,
+                          })
+                        }}
+                        className="w-[28px] h-[28px] rounded-[4px] flex items-center justify-center text-[#6E6E73] hover:text-[#B3261E] hover:bg-[#FCEAE9] transition-colors cursor-pointer"
+                        title="Delete this session"
+                      >
+                        <Trash2 className="w-[16px] h-[16px]" />
+                      </button>
+
                       <Link
                         href={`/sessions/${datePart}/${sessionPart}`}
                         className="h-[32px] px-[12px] bg-[#FFFFFF] border border-[#E5E5E7] hover:bg-[#FAFAFA] text-[#1D1D1F] text-[13px] font-[500] rounded-[6px] flex items-center gap-[4px] transition-all cursor-pointer"
                       >
                         <span>View Details</span>
-                        <ChevronRight className="w-[14px] h-[14px] text-[#6E6E73]" />
+                        <ChevronRight className="w-[14px] h-[14px]" />
                       </Link>
                     </div>
                   </div>
@@ -296,6 +345,42 @@ export default function SessionsDashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Custom Confirmation Deletion Modal (360px Wide) */}
+        {deleteModalState && (
+          <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] w-full max-w-[360px] p-[24px] shadow-xl space-y-4 font-sans">
+              <div className="flex items-center gap-2 text-[#B3261E]">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="text-[16px] font-[600] text-[#1D1D1F]">Delete this session?</h3>
+              </div>
+
+              <p className="text-[13px] font-[400] text-[#6E6E73] leading-relaxed">
+                This permanently deletes <strong>{deleteModalState.sessionLabel}</strong>'s video, generated report, and telemetry data. This can't be undone.
+              </p>
+
+              <div className="flex items-center justify-end gap-[8px] pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalState(null)}
+                  disabled={deleting}
+                  className="h-[36px] px-[14px] bg-[#FFFFFF] border border-[#E5E5E7] hover:bg-[#FAFAFA] rounded-[6px] text-[13px] font-[500] text-[#1D1D1F] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                  className="h-[36px] px-[16px] bg-[#B3261E] hover:opacity-90 rounded-[6px] text-[13px] font-[500] text-white cursor-pointer transition-all"
+                >
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </AppShell>
   )

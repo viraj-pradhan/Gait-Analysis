@@ -109,10 +109,11 @@ export default function PatientProfilePage() {
     setDeleting(true)
     try {
       if (deleteModalState.type === 'session' && deleteModalState.sessionId) {
-        const [datePart, sessionPart] = deleteModalState.sessionId.split('/')
+        const targetId = deleteModalState.sessionId
+        const [datePart, sessionPart] = targetId.split('/')
         await deleteSession(datePart, sessionPart)
+        setSessions((prev) => prev.filter((s) => s.session_id !== targetId))
         setDeleteModalState(null)
-        await fetchData()
       } else if (deleteModalState.type === 'patient') {
         await deletePatient(patientId)
         setDeleteModalState(null)
@@ -386,11 +387,16 @@ export default function PatientProfilePage() {
 
                       {/* Trash Delete Icon (16px icon, 28px tap target) */}
                       <button
-                        onClick={() => setDeleteModalState({ 
-                          type: 'session', 
-                          sessionId: s.session_id, 
-                          sessionLabel: titleText 
-                        })}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          e.preventDefault()
+                          setDeleteModalState({ 
+                            type: 'session', 
+                            sessionId: s.session_id, 
+                            sessionLabel: titleText 
+                          })
+                        }}
                         className="w-[28px] h-[28px] rounded-[4px] flex items-center justify-center text-[#6E6E73] hover:text-[#B3261E] hover:bg-[#FCEAE9] transition-colors cursor-pointer"
                         title="Delete this session"
                       >

@@ -176,48 +176,73 @@ async def update_session_patient_name(
 
 
 @app.delete("/api/sessions/{date_str}/{session_num}")
-async def delete_session(date_str: str, session_num: str):
-    """Permanently delete a session directory, its files, index record, and DB job entry."""
+@app.delete("/api/sessions/{session_id:path}")
+async def delete_session(date_str: str = None, session_num: str = None, session_id: str = None):
+    """Permanently delete a session directory, all its stored files, index record, and DB job entry."""
     import shutil
-    session_dir = SESSIONS_DIR / date_str / session_num
-    session_id = f"{date_str}/{session_num}"
 
-    # Delete physical directory
+    if date_str and session_num:
+        full_session_id = f"{date_str}/{session_num}"
+    elif session_id:
+        full_session_id = session_id
+    else:
+        raise HTTPException(status_code=400, detail="Invalid session identifier")
+
+    parts = full_session_id.split("/")
+    if len(parts) == 2:
+        date_part, session_part = parts
+        session_dir = SESSIONS_DIR / date_part / session_part
+    else:
+        session_dir = SESSIONS_DIR / full_session_id
+
+    # 1. Delete physical directory and all stored files
+    deleted_files = False
     if session_dir.exists():
         try:
             shutil.rmtree(session_dir)
+            deleted_files = True
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to delete directory: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to delete session files: {e}")
 
-    # Remove from index.json
+    # 2. Remove from index.json
     index_file = SESSIONS_DIR / "index.json"
     if index_file.exists():
         try:
             with open(index_file, "r", encoding="utf-8") as f:
                 index = json.load(f)
 
-            new_index = [entry for entry in index if entry.get("session_id") != session_id]
+            new_index = [entry for entry in index if entry.get("session_id") != full_session_id]
 
             with open(index_file, "w", encoding="utf-8") as f:
                 json.dump(new_index, f, indent=2)
         except Exception as e:
             print(f"⚠ Warning: Failed to update index.json on session delete: {e}")
 
-    # Remove from MongoDB jobs
+    # 3. Remove from MongoDB jobs collection
     try:
-        await jobs_col().delete_many({"session_id": session_id})
+        await jobs_col().delete_many({
+            "$or": [
+                {"session_id": full_session_id},
+                {"_id": full_session_id}
+            ]
+        })
     except Exception:
         pass
 
-    # Cleanup empty date dir if no sessions left
-    date_dir = SESSIONS_DIR / date_str
-    if date_dir.exists() and not any(date_dir.iterdir()):
-        try:
-            date_dir.rmdir()
-        except Exception:
-            pass
+    # 4. Cleanup empty date dir if no sessions left
+    if len(parts) == 2:
+        date_dir = SESSIONS_DIR / parts[0]
+        if date_dir.exists() and not any(date_dir.iterdir()):
+            try:
+                date_dir.rmdir()
+            except Exception:
+                pass
 
-    return {"status": "success", "message": f"Session {session_id} deleted successfully"}
+    return {
+        "status": "success", 
+        "deleted_session_id": full_session_id, 
+        "files_removed": deleted_files
+    }
 
 
 @app.delete("/api/patients/{patient_id}")
