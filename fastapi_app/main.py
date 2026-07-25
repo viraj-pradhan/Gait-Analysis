@@ -14,6 +14,26 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
 )
 
+# Global Exception Handler to surface full tracebacks and detailed error JSON instead of bare 500
+from fastapi import Request
+from fastapi.responses import JSONResponse
+import traceback
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"🔥 Unhandled Exception on {request.method} {request.url.path}: {type(exc).__name__} - {exc}")
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal Server Error ({type(exc).__name__}): {str(exc)}",
+            "exception": type(exc).__name__,
+        },
+    )
+
 # CORS Configuration
 origins = [
     "http://localhost:3000",
