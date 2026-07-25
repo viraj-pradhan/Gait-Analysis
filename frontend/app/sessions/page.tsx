@@ -3,7 +3,9 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/AppShell'
+import { JointTimeSeriesChart } from '@/components/charts/JointTimeSeriesChart'
 import { getToken, listSessions, getStaticUrl, updateSessionPatientName } from '@/lib/api'
+import { fetchGaitCsv, type GaitCsvRow } from '@/lib/csv'
 import { 
   Activity, 
   Clock, 
@@ -44,6 +46,21 @@ export default function SessionsDashboardPage() {
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+
+  // Interactive Live Joint Graph State
+  const [csvData, setCsvData] = useState<GaitCsvRow[]>([])
+  const [activeJoint, setActiveJoint] = useState<'knee' | 'hip' | 'ankle'>('knee')
+
+  useEffect(() => {
+    const valid = sessions.filter(s => s.status === 'success')
+    if (valid.length > 0) {
+      const latest = valid[0]
+      const [dPart, sPart] = latest.session_id.split('/')
+      fetchGaitCsv(getStaticUrl(`/sessions/${dPart}/${sPart}/gait_analysis_data.csv`), 1)
+        .then(setCsvData)
+        .catch(() => {})
+    }
+  }, [sessions])
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
@@ -177,11 +194,49 @@ export default function SessionsDashboardPage() {
               <p className="text-2xl font-extrabold text-[#1D1D1F] mt-1">{avgConfidence}%</p>
               <p className="text-[11px] text-[#6E6E73] mt-0.5">Mean landmark visibility confidence</p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-[#FEF8E7] flex items-center justify-center text-[#9C6B00]">
-              <Clock className="w-6 h-6" />
-            </div>
           </div>
         </div>
+
+        {/* Interactive Live Telemetry Joint Trajectory Graphs (Knee, Hip, Ankle) */}
+        {mounted && (
+          <div className="bg-[#FFFFFF] p-6 rounded-2xl border border-[#E5E5E7] shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E5E7] pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-[#1D1D1F] flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[#0B6E4F]" />
+                  Live Joint Angle Trajectory Graphs (Knee, Hip, Ankle)
+                </h3>
+                <p className="text-xs text-[#6E6E73] mt-0.5">Interactive frame-by-frame joint angle curves (Left vs Right)</p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-[#FAFAFA] p-1 rounded-xl border border-[#E5E5E7]">
+                {(['knee', 'hip', 'ankle'] as const).map((j) => (
+                  <button
+                    key={j}
+                    onClick={() => setActiveJoint(j)}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-colors ${
+                      activeJoint === j
+                        ? 'bg-[#0B6E4F] text-white shadow-xs'
+                        : 'text-[#6E6E73] hover:text-[#1D1D1F]'
+                    }`}
+                  >
+                    {j} Joint
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {csvData.length > 0 ? (
+              <div className="w-full pt-2">
+                <JointTimeSeriesChart data={csvData} joint={activeJoint} height={300} />
+              </div>
+            ) : (
+              <div className="p-8 text-center text-xs text-[#6E6E73] bg-[#FAFAFA] rounded-xl border border-dashed border-[#E5E5E7]">
+                Loading live joint trajectory telemetry...
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Recharts Recovery Trend Line Chart */}
         {mounted && chartData.length > 0 && (

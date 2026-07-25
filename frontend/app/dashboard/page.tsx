@@ -5,15 +5,21 @@ import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/AppShell'
 import { StatCard } from '@/components/ui/StatCard'
 import { RecoveryTrendChart } from '@/components/charts/RecoveryTrendChart'
-import { getToken, listSessions } from '@/lib/api'
+import { JointTimeSeriesChart } from '@/components/charts/JointTimeSeriesChart'
+import { getToken, listSessions, getStaticUrl } from '@/lib/api'
+import { fetchGaitCsv, type GaitCsvRow } from '@/lib/csv'
 import { buildTrendChartData, getConfidenceBadge, type SessionEntry } from '@/lib/session-utils'
-import { Activity, TrendingUp, ShieldCheck, ChevronRight, Users } from 'lucide-react'
+import { Activity, TrendingUp, ShieldCheck, ChevronRight, Users, User, BarChart3 } from 'lucide-react'
 
 export default function DashboardOverviewPage() {
   const router = useRouter()
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
+
+  // Interactive Live Joint Graph State
+  const [csvData, setCsvData] = useState<GaitCsvRow[]>([])
+  const [activeJoint, setActiveJoint] = useState<'knee' | 'hip' | 'ankle'>('knee')
 
   useEffect(() => {
     setMounted(true)
@@ -22,7 +28,17 @@ export default function DashboardOverviewPage() {
       return
     }
     listSessions()
-      .then(setSessions)
+      .then((data) => {
+        setSessions(data)
+        const valid = data.filter((s: any) => s.status === 'success')
+        if (valid.length > 0) {
+          const latest = valid[0]
+          const [dPart, sPart] = latest.session_id.split('/')
+          fetchGaitCsv(getStaticUrl(`/sessions/${dPart}/${sPart}/gait_analysis_data.csv`), 1)
+            .then(setCsvData)
+            .catch(() => {})
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [router])
@@ -65,10 +81,48 @@ export default function DashboardOverviewPage() {
           <StatCard label="Tracking Quality" value={`${avgConfidence}%`} sub="Mean pose confidence" icon={ShieldCheck} accent="amber" />
         </div>
 
+        {/* Interactive Live Joint Graphs (Knee, Hip, Ankle) */}
+        <div className="section-card section-card-padded space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E2E8F0] pb-3">
+            <div>
+              <h3 className="section-card-title flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-[#0B6E4F]" />
+                Live Joint Angle Trajectory Graphs (Knee, Hip, Ankle)
+              </h3>
+              <p className="section-card-desc">Interactive frame-by-frame joint angle curves (Left vs Right)</p>
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+              {(['knee', 'hip', 'ankle'] as const).map((j) => (
+                <button
+                  key={j}
+                  onClick={() => setActiveJoint(j)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-colors ${
+                    activeJoint === j
+                      ? 'bg-[#0B6E4F] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {j} Joint
+                </button>
+              ))}
+            </div>
+          </div>
+          {mounted && csvData.length > 0 ? (
+            <div className="w-full pt-2">
+              <JointTimeSeriesChart data={csvData} joint={activeJoint} height={300} />
+            </div>
+          ) : (
+            <div className="p-8 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              Loading live joint trajectory graphs...
+            </div>
+          )}
+        </div>
+
+        {/* Recovery Trend Dual-Axis Line Chart */}
         <div className="section-card section-card-padded">
           <div className="section-card-header">
             <div>
-              <h3 className="section-card-title">Recovery Trend</h3>
+              <h3 className="section-card-title">Recovery Trend Across Sessions</h3>
               <p className="section-card-desc">Cadence and tracking confidence over time — dual-axis for accurate comparison</p>
             </div>
             <Link href="/sessions" className="text-xs text-[#0B6E4F] font-bold hover:underline flex items-center gap-1 shrink-0">
@@ -78,6 +132,7 @@ export default function DashboardOverviewPage() {
           {mounted && <RecoveryTrendChart data={chartData} height={300} />}
         </div>
 
+        {/* Recent Sessions Table */}
         <div className="section-card overflow-hidden">
           <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between bg-slate-50/80">
             <h3 className="text-sm font-bold text-slate-900">Recent Sessions</h3>
@@ -101,7 +156,7 @@ export default function DashboardOverviewPage() {
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[#0B6E4F] font-bold text-sm shrink-0">
-                        {(s.patient_name || 'P')[0].toUpperCase()}
+                        <User className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-slate-900 truncate">{s.patient_name || 'Patient'} — {s.session_label}</p>
