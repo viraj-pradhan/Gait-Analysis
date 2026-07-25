@@ -1,4 +1,13 @@
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+function getApiUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL
+  }
+  if (typeof window !== 'undefined') {
+    // In browser: use relative path so requests route through Next.js rewrite proxy
+    return ''
+  }
+  return 'http://127.0.0.1:8000'
+}
 
 export function getToken() {
   if (typeof window === 'undefined') return null
@@ -33,8 +42,9 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
   if (!(opts.body instanceof FormData)) {
     (headers as Record<string, string>)['Content-Type'] = 'application/json'
   }
+  const baseUrl = getApiUrl()
   try {
-    const res = await fetch(`${API}${path}`, { ...opts, headers })
+    const res = await fetch(`${baseUrl}${path}`, { ...opts, headers })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       throw new Error(data.detail || `HTTP ${res.status}`)
@@ -42,7 +52,7 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
     return res
   } catch (err: any) {
     if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-      throw new Error('Unable to connect to Gait Analysis API backend at ' + API + '. Please verify FastAPI server on port 8000 is active.')
+      throw new Error('Unable to connect to Gait Analysis API backend. Please check network connection.')
     }
     throw err
   }
@@ -124,11 +134,13 @@ export function getStaticUrl(relPath: string) {
   if (!relPath) return ''
   if (relPath.startsWith('http')) return relPath
   const clean = relPath.startsWith('/') ? relPath : `/${relPath}`
-  return `${API}${clean}`
+  const base = getApiUrl()
+  return `${base}${clean}`
 }
 
 export function downloadUrl(jobId: string, type: 'video' | 'xlsx' | 'docx') {
-  return `${API}/api/jobs/${jobId}/download/${type}`
+  const base = getApiUrl()
+  return `${base}/api/jobs/${jobId}/download/${type}`
 }
 
 export async function downloadFile(jobId: string, type: 'video' | 'xlsx' | 'docx') {
