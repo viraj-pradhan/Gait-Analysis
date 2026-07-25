@@ -71,6 +71,11 @@ def update_index(meta_entry: dict):
 
 # ── Single Session Processing ─────────────────────────────────────────────────
 
+import threading
+
+_session_lock = threading.Lock()
+
+
 def process_single_video(
     video_path: Path, 
     date_str: str = None, 
@@ -89,28 +94,48 @@ def process_single_video(
     if not time_str:
         time_str = now_dt.strftime("%H:%M")
 
-    date_dir = SESSIONS_DIR / date_str
-    date_dir.mkdir(parents=True, exist_ok=True)
+    # Thread-safe atomic session allocation
+    with _session_lock:
+        date_dir = SESSIONS_DIR / date_str
+        date_dir.mkdir(parents=True, exist_ok=True)
 
-    # Auto-increment session_N
-    existing_sessions = [
-        d for d in date_dir.iterdir()
-        if d.is_dir() and d.name.startswith("session_")
-    ]
-    session_nums = []
-    for d in existing_sessions:
-        try:
-            session_nums.append(int(d.name.split("_")[1]))
-        except ValueError:
-            pass
+        # Find the next available non-existent session number
+        next_num = 1
+        while (date_dir / f"session_{next_num}").exists():
+            next_num += 1
 
-    next_num = max(session_nums) + 1 if session_nums else 1
-    session_id = f"{date_str}/session_{next_num}"
-    session_dir = date_dir / f"session_{next_num}"
-    session_dir.mkdir(parents=True, exist_ok=True)
+        session_id = f"{date_str}/session_{next_num}"
+        session_dir = date_dir / f"session_{next_num}"
+        session_dir.mkdir(parents=True, exist_ok=False)
 
-    session_label = f"Session {next_num} — {patient_name} ({date_str})"
-    print(f"\n▶ Processing Session: {session_id} [{patient_name}] ({video_path.name})")
+        session_label = f"Session {next_num} — {patient_name} ({date_str})"
+        print(f"\n▶ Processing Session: {session_id} [{patient_name}] ({video_path.name})")
+
+        meta_entry = {
+            "session_id": session_id,
+            "patient_name": patient_name,
+            "recorded_date": date_str,
+            "recorded_time": time_str,
+            "video_filename": video_path.name,
+            "date": date_str,
+            "session_number": next_num,
+            "session_label": session_label,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+            "fps": 0.0,
+            "duration_sec": 0.0,
+            "cadence_spm": 0.0,
+            "mean_confidence": 0.0,
+            "status": "processing",
+            "error": None,
+            "session_path": str(session_dir.relative_to(SESSIONS_DIR.parent)),
+            "report_docx": str((session_dir / "report.docx").relative_to(SESSIONS_DIR.parent)),
+        }
+
+        # Write initial meta.json and update index immediately under lock
+        with open(session_dir / "meta.json", "w", encoding="utf-8") as f:
+            json.dump(meta_entry, f, indent=2)
+
+        update_index(meta_entry)
 
     # Copy input video
     input_video_dest = session_dir / "input.mp4"
