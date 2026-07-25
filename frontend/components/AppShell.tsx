@@ -31,12 +31,26 @@ export function AppShell({ children }: AppShellProps) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [preFilledPatientName, setPreFilledPatientName] = useState('')
   const pollRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     setUser(getUser())
+
+    const handleCustomOpen = (e: Event) => {
+      const customEv = e as CustomEvent<{ patientName?: string }>
+      if (customEv.detail?.patientName) {
+        setPreFilledPatientName(customEv.detail.patientName)
+      } else {
+        setPreFilledPatientName('')
+      }
+      setUploadModalOpen(true)
+    }
+
+    window.addEventListener('open-new-session-modal', handleCustomOpen)
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
+      window.removeEventListener('open-new-session-modal', handleCustomOpen)
     }
   }, [])
 
@@ -143,11 +157,12 @@ export function AppShell({ children }: AppShellProps) {
 
       <NewSessionModal
         open={uploadModalOpen}
-        onClose={() => { setUploadModalOpen(false); setUploadError('') }}
+        onClose={() => { setUploadModalOpen(false); setUploadError(''); setPreFilledPatientName('') }}
         onSubmit={handleUploadSubmit}
         uploading={uploading}
         error={uploadError}
         progress={uploadProgress}
+        defaultPatientName={preFilledPatientName}
       />
     </div>
   )

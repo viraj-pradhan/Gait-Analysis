@@ -76,6 +76,37 @@ import threading
 _session_lock = threading.Lock()
 
 
+def reencode_for_browser(video_path: str):
+    """Re-encode OpenCV's mp4v output to browser-compatible H.264 with faststart."""
+    if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
+        return
+    try:
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        ffmpeg_exe = shutil.which("ffmpeg") or "ffmpeg"
+
+    temp_raw = video_path + ".raw.mp4"
+    os.rename(video_path, temp_raw)
+    cmd = [
+        ffmpeg_exe, "-y",
+        "-i", temp_raw,
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        video_path,
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if os.path.exists(temp_raw):
+        os.remove(temp_raw)
+    if res.returncode == 0:
+        print(f"🎬 Successfully re-encoded {Path(video_path).name} to H.264 for HTML5 browser playback.")
+    else:
+        print(f"⚠ Warning: H.264 re-encode failed: {res.stderr}")
+
+
 def process_single_video(
     video_path: Path, 
     date_str: str = None, 
@@ -171,6 +202,9 @@ def process_single_video(
             progress_callback=progress_callback
         )
         analyzer.run_complete_analysis(output_dir=str(session_dir))
+
+        # Re-encode OpenCV output to browser-compatible H.264 (avc1 + yuv420p)
+        reencode_for_browser(str(annotated_output))
 
         # Build telemetry report dictionary
         report_data = build_report_data(

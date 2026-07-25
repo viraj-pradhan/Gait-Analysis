@@ -14,9 +14,10 @@ type Props = {
   uploading: boolean
   error: string
   progress?: number
+  defaultPatientName?: string
 }
 
-export function NewSessionModal({ open, onClose, onSubmit, uploading, error, progress = 0 }: Props) {
+export function NewSessionModal({ open, onClose, onSubmit, uploading, error, progress = 0, defaultPatientName = '' }: Props) {
   const [step, setStep] = useState<1 | 2>(1)
   const [patientName, setPatientName] = useState('')
   const [recordedDate, setRecordedDate] = useState('')
@@ -31,8 +32,11 @@ export function NewSessionModal({ open, onClose, onSubmit, uploading, error, pro
       const nowTime = new Date().toTimeString().split(' ')[0].substring(0, 5)
       setRecordedDate(today)
       setRecordedTime(nowTime)
+      if (defaultPatientName) {
+        setPatientName(defaultPatientName)
+      }
     }
-  }, [open])
+  }, [open, defaultPatientName])
 
   if (!open) return null
 

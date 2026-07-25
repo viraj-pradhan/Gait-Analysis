@@ -267,9 +267,11 @@ export default function PatientProfilePage() {
 
               <button
                 onClick={() => {
-                  // Trigger upload modal with pre-selected patient
-                  const btn = document.getElementById('global-new-session-btn')
-                  if (btn) btn.click()
+                  window.dispatchEvent(
+                    new CustomEvent('open-new-session-modal', {
+                      detail: { patientName: primaryPatientName },
+                    })
+                  )
                 }}
                 className="h-[36px] px-[16px] bg-[#0B6E4F] hover:opacity-90 text-white rounded-[6px] text-[13px] font-[500] flex items-center gap-[6px] transition-all cursor-pointer shadow-xs"
               >
