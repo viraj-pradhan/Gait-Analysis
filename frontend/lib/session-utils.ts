@@ -1,3 +1,5 @@
+import { getConfidenceTier, getAsymmetryTier } from './badges'
+
 export type SessionEntry = {
   session_id: string
   patient_name?: string
@@ -16,34 +18,37 @@ export type SessionEntry = {
   report_docx: string
 }
 
-export function getConfidenceBadge(confFrac: number) {
-  const pct = confFrac * 100
-  if (pct >= 70) return { label: `${pct.toFixed(0)}% Good`, class: 'badge-good' as const }
-  if (pct >= 50) return { label: `${pct.toFixed(0)}% Fair`, class: 'badge-mild' as const }
-  return { label: `${pct.toFixed(0)}% Low`, class: 'badge-high' as const }
-}
+export { getConfidenceTier, getAsymmetryTier }
 
-export function getAsymmetryBadge(deg: number) {
-  if (deg >= 20) return { label: 'High', class: 'badge-high' as const }
-  if (deg >= 10) return { label: 'Mild', class: 'badge-mild' as const }
-  return { label: 'Normal', class: 'badge-good' as const }
+export function getConfidenceBadge(confFrac: number) {
+  const tier = getConfidenceTier(confFrac)
+  return { 
+    label: tier.fullLabel, 
+    class: tier.label === 'Good' ? 'badge-good' : tier.label === 'Fair' ? 'badge-mild' : 'badge-high' 
+  }
 }
 
 export function buildTrendChartData(sessions: SessionEntry[]) {
   return sessions
     .filter((s) => s.status === 'success')
     .sort((a, b) => {
-      const dateCmp = (a.date || '').localeCompare(b.date || '')
+      const dateCmp = (a.date || a.recorded_date || '').localeCompare(b.date || b.recorded_date || '')
       if (dateCmp !== 0) return dateCmp
       return (a.session_number || 0) - (b.session_number || 0)
     })
-    .map((s) => ({
-      name: s.patient_name || s.session_label || `S${s.session_number}`,
-      session: s.session_label || s.session_id,
-      date: s.recorded_date || s.date,
-      cadence: Number(s.cadence_spm || 0),
-      confidence: Number(((s.mean_confidence || 0) * 100).toFixed(1)),
-    }))
+    .map((s) => {
+      const num = s.session_number || 1
+      const dateStr = s.recorded_date || s.date || ''
+      const sessionLabel = `Session ${num} — ${dateStr}`
+      return {
+        name: sessionLabel,
+        session: sessionLabel,
+        patient: s.patient_name || 'Unassigned',
+        date: dateStr,
+        cadence: Number((s.cadence_spm || 0).toFixed(1)),
+        confidence: Number(((s.mean_confidence || 0) * 100).toFixed(1)),
+      }
+    })
 }
 
 export function buildRomChartData(report: {

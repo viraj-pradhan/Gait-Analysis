@@ -122,16 +122,16 @@ class UnderwaterGaitAnalyzerFixed:
 
     def _compute_steps_post_process(self):
         """Use scipy.signal.find_peaks on smoothed ankle trajectories for accurate step counting."""
-        min_dist = max(5, int(self.fps * 0.7))
+        min_dist = max(10, int(self.fps * 0.55))
 
         if len(self.left_ankle_y_raw) > min_dist:
             l_smooth = self._smooth(self.left_ankle_y_raw)
-            peaks_l, _ = signal.find_peaks(-l_smooth, distance=min_dist, prominence=0.005)
+            peaks_l, _ = signal.find_peaks(-l_smooth, distance=min_dist, prominence=0.015)
             self.step_frames_left = [int(p) for p in peaks_l]
 
         if len(self.right_ankle_y_raw) > min_dist:
             r_smooth = self._smooth(self.right_ankle_y_raw)
-            peaks_r, _ = signal.find_peaks(-r_smooth, distance=min_dist, prominence=0.005)
+            peaks_r, _ = signal.find_peaks(-r_smooth, distance=min_dist, prominence=0.015)
             self.step_frames_right = [int(p) for p in peaks_r]
 
     # ── NaN placeholder ───────────────────────────────────────────────────────

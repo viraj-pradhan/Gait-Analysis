@@ -28,9 +28,9 @@ def _calc_correlation(l_vals, r_vals):
     r = np.asarray(r_vals, dtype=float)
     mask = ~np.isnan(l) & ~np.isnan(r)
     if np.sum(mask) < 5:
-        return 0.0
+        return None
     corr = np.corrcoef(l[mask], r[mask])[0, 1]
-    return 0.0 if np.isnan(corr) else round(float(corr), 2)
+    return None if np.isnan(corr) else round(float(corr), 2)
 
 
 def _asymmetry_status(deg: float) -> str:

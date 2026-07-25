@@ -6,7 +6,8 @@ import { AppShell } from '@/components/AppShell'
 import { StatCard } from '@/components/ui/StatCard'
 import { RecoveryTrendChart } from '@/components/charts/RecoveryTrendChart'
 import { getToken, listSessions } from '@/lib/api'
-import { buildTrendChartData, getConfidenceBadge, type SessionEntry } from '@/lib/session-utils'
+import { buildTrendChartData, type SessionEntry } from '@/lib/session-utils'
+import { getConfidenceTier } from '@/lib/badges'
 import { Activity, TrendingUp, ShieldCheck, ChevronRight, Users, User } from 'lucide-react'
 
 export default function DashboardOverviewPage() {
@@ -42,7 +43,8 @@ export default function DashboardOverviewPage() {
 
   return (
     <AppShell>
-      <div className="space-y-6">
+      <div className="space-y-6 font-sans">
+        {/* Banner */}
         <div className="page-banner">
           <div className="page-header">
             <h1 className="page-title">Clinical Overview</h1>
@@ -52,12 +54,13 @@ export default function DashboardOverviewPage() {
           </div>
         </div>
 
+        {/* 4 Stat Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <StatCard label="Total Sessions" value={totalSessions} sub="Completed evaluations" icon={Activity} accent="green" />
           <StatCard label="Patients" value={uniquePatients} sub="Unique patient records" icon={Users} accent="blue" />
           <StatCard
             label="Avg Cadence"
-            value={<>{avgCadence} <span className="text-sm font-semibold text-slate-400">spm</span></>}
+            value={<>{avgCadence} <span className="text-xs font-semibold text-[#6E6E73]">spm</span></>}
             sub="Steps per minute"
             icon={TrendingUp}
             accent="green"
@@ -65,56 +68,76 @@ export default function DashboardOverviewPage() {
           <StatCard label="Tracking Quality" value={`${avgConfidence}%`} sub="Mean pose confidence" icon={ShieldCheck} accent="amber" />
         </div>
 
-        {/* Recovery Trend Dual-Axis Line Chart */}
-        <div className="section-card section-card-padded">
-          <div className="section-card-header">
+        {/* Recovery Trend Chart Card */}
+        <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] p-[24px]">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="section-card-title">Recovery Trend Across Sessions</h3>
-              <p className="section-card-desc">Cadence and tracking confidence over time — dual-axis for accurate comparison</p>
+              <h3 className="text-[16px] font-[600] text-[#1D1D1F]">Recovery Trend Across Sessions</h3>
+              <p className="text-[13px] font-[400] text-[#6E6E73] mt-[2px]">Cadence and tracking confidence over time — dual-axis for accurate comparison</p>
             </div>
-            <Link href="/sessions" className="text-xs text-[#0B6E4F] font-bold hover:underline flex items-center gap-1 shrink-0">
-              All Sessions <ChevronRight className="w-3.5 h-3.5" />
+            <Link href="/sessions" className="text-[13px] font-[500] text-[#0B6E4F] hover:underline flex items-center gap-[4px] shrink-0">
+              All Sessions <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
-          {mounted && <RecoveryTrendChart data={chartData} height={300} />}
+          {mounted && <RecoveryTrendChart data={chartData} height={280} />}
         </div>
 
-        {/* Recent Sessions Table */}
-        <div className="section-card overflow-hidden">
-          <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between bg-slate-50/80">
-            <h3 className="text-sm font-bold text-slate-900">Recent Sessions</h3>
-            <Link href="/sessions" className="text-xs text-[#0B6E4F] font-bold hover:underline">View all</Link>
+        {/* Recent Sessions Card */}
+        <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] overflow-hidden">
+          {/* Header Row (56px Height) */}
+          <div className="h-[56px] px-[16px] border-b border-[#E5E5E7] flex items-center justify-between">
+            <h3 className="text-[16px] font-[600] text-[#1D1D1F]">Recent Sessions</h3>
+            <Link href="/sessions" className="text-[13px] font-[500] text-[#0B6E4F] hover:underline">
+              View all
+            </Link>
           </div>
 
           {loading ? (
-            <div className="p-10 text-center text-sm text-slate-500">Loading sessions…</div>
+            <div className="p-10 text-center text-[13px] text-[#6E6E73]">Loading sessions…</div>
           ) : recentSessions.length === 0 ? (
-            <div className="p-10 text-center text-sm text-slate-500">No sessions yet. Upload a gait video to get started.</div>
+            <div className="p-10 text-center text-[13px] text-[#6E6E73]">No sessions recorded yet. Upload a video to get started.</div>
           ) : (
-            <div className="divide-y divide-[#E2E8F0]">
-              {recentSessions.map((s) => {
+            <div>
+              {recentSessions.map((s, idx) => {
                 const [datePart, sessionPart] = s.session_id.split('/')
-                const badge = getConfidenceBadge(s.mean_confidence || 0)
+                const tier = getConfidenceTier(s.mean_confidence)
+                const num = s.session_number || idx + 1
+                const dateStr = s.recorded_date || s.date || datePart
+                const titleText = `Session ${num} — ${dateStr}`
+                const patientText = s.patient_name || 'Unassigned Patient'
+
                 return (
                   <Link
                     key={s.session_id}
                     href={`/sessions/${datePart}/${sessionPart}`}
-                    className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-slate-50 transition-colors group"
+                    className={`h-[64px] px-[16px] flex items-center justify-between hover:bg-[#FAFAFA] transition-colors ${
+                      idx > 0 ? 'border-t border-[#E5E5E7]' : ''
+                    }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[#0B6E4F] font-bold text-sm shrink-0">
-                        <User className="w-5 h-5" />
+                    {/* Left side: Avatar + Session Title + Meta */}
+                    <div className="flex items-center min-w-0">
+                      <div className="w-[32px] h-[32px] rounded-[6px] bg-[#E7F5EA] text-[#0B6E4F] flex items-center justify-center font-bold shrink-0 mr-[12px]">
+                        <User className="w-[16px] h-[16px]" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-slate-900 truncate">{s.patient_name || 'Patient'} — {s.session_label}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {s.recorded_date || s.date} · {s.duration_sec}s · <span className="text-[#0B6E4F] font-semibold">{s.cadence_spm} spm</span>
+                        <p className="text-[14px] font-[500] text-[#1D1D1F] truncate">
+                          {titleText}
+                        </p>
+                        <p className="text-[12px] font-[400] text-[#6E6E73] mt-[2px] truncate">
+                          {patientText} · {s.duration_sec || 0}s · <span className="font-[500] text-[#0B6E4F]">{s.cadence_spm || 0} spm</span>
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`badge-soft ${badge.class} hidden sm:inline-flex`}>{badge.label}</span>
-                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-[#0B6E4F] transition-colors" />
+
+                    {/* Right side: Badge + Chevron (8px gap) */}
+                    <div className="flex items-center gap-[8px] shrink-0">
+                      <span 
+                        className="text-[11px] font-[500] px-[8px] py-[2px] rounded-[4px]"
+                        style={{ color: tier.textColor, backgroundColor: tier.bgColor }}
+                      >
+                        {tier.fullLabel}
+                      </span>
+                      <ChevronRight className="w-[16px] h-[16px] text-[#6E6E73]" />
                     </div>
                   </Link>
                 )
