@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
+import { JointTimeSeriesChart } from '@/components/charts/JointTimeSeriesChart'
+import { fetchGaitCsv, GaitCsvRow } from '@/lib/csv'
 import { getToken, getSessionDetail, getStaticUrl, updateSessionPatientName } from '@/lib/api'
 import { 
   ArrowLeft, 
@@ -49,10 +51,22 @@ export default function SessionDetailPage() {
   const [activeTab, setActiveTab] = useState<'metrics' | 'plots' | 'video'>('metrics')
   const [activeImageModal, setActiveImageModal] = useState<{ src: string; title: string } | null>(null)
 
+  // Interactive CSV Telemetry State
+  const [csvData, setCsvData] = useState<GaitCsvRow[]>([])
+  const [activeJoint, setActiveJoint] = useState<'knee' | 'hip' | 'ankle'>('knee')
+
   // Patient Name Editing State
   const [isEditingName, setIsEditingName] = useState(false)
   const [editNameValue, setEditNameValue] = useState('')
   const [savingName, setSavingName] = useState(false)
+
+  useEffect(() => {
+    if (data?.csv_url) {
+      fetchGaitCsv(getStaticUrl(data.csv_url), 1)
+        .then(setCsvData)
+        .catch(() => {})
+    }
+  }, [data])
 
   useEffect(() => {
     if (!getToken()) {
@@ -364,6 +378,45 @@ export default function SessionDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* Interactive Live Telemetry Joint Graphs (Knees, Hips, Ankles) */}
+            <div className="bg-[#FFFFFF] p-6 space-y-4 shadow-sm border border-[#E5E5E7] rounded-2xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E5E7] pb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-[#1D1D1F] flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-[#0B6E4F]" />
+                    Interactive Live Joint Trajectory Graphs (Knees, Hips, Ankles)
+                  </h3>
+                  <p className="text-xs text-[#6E6E73] mt-0.5">Hover on curves to view frame-by-frame joint angle telemetry over time</p>
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-[#FAFAFA] p-1 rounded-xl border border-[#E5E5E7]">
+                  {(['knee', 'hip', 'ankle'] as const).map((j) => (
+                    <button
+                      key={j}
+                      onClick={() => setActiveJoint(j)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-colors ${
+                        activeJoint === j
+                          ? 'bg-[#0B6E4F] text-white shadow-xs'
+                          : 'text-[#6E6E73] hover:text-[#1D1D1F]'
+                      }`}
+                    >
+                      {j} Joint
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {csvData.length > 0 ? (
+                <div className="pt-2">
+                  <JointTimeSeriesChart data={csvData} joint={activeJoint} height={320} />
+                </div>
+              ) : (
+                <div className="p-8 text-center text-xs text-[#6E6E73] bg-[#FAFAFA] rounded-xl border border-dashed border-[#E5E5E7]">
+                  Loading live CSV joint telemetry data...
+                </div>
+              )}
+            </div>
           </div>
         )}
 
