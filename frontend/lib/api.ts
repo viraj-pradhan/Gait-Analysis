@@ -3,10 +3,7 @@ function getApiUrl(): string {
     return process.env.NEXT_PUBLIC_API_URL
   }
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return 'http://localhost:8000'
-    }
+    // In browser: always use relative path so Next.js handles proxying seamlessly with zero CORS issues
     return ''
   }
   return 'http://127.0.0.1:8000'
