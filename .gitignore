@@ -1,0 +1,36 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+dcinfra-env/
+venv/
+.env
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Uploads & session output data directories (large binary data at root)
+/uploads/
+/sessions/
+/jobs_output/
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Gemini agent state
+.gemini/
+.agents/
+
+# Misc
+*.egg-info/
+dist/
+build/
