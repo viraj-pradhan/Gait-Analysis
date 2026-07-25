@@ -3,25 +3,19 @@ import React, { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
-import { JointTimeSeriesChart } from '@/components/charts/JointTimeSeriesChart'
-import { fetchGaitCsv, GaitCsvRow } from '@/lib/csv'
 import { getToken, getSessionDetail, getStaticUrl, updateSessionPatientName } from '@/lib/api'
-import { getConfidenceTier, getAsymmetryTier } from '@/lib/badges'
+import { getConfidenceTier } from '@/lib/badges'
 import { 
   ArrowLeft, 
   Download, 
-  Activity, 
   AlertCircle,
-  FileSpreadsheet,
-  User,
-  Calendar,
-  Maximize2,
   X,
   Play,
-  BarChart3,
+  FileText,
   Video,
   Pencil,
-  Check
+  Check,
+  Maximize2
 } from 'lucide-react'
 
 type SessionData = {
@@ -46,24 +40,13 @@ export default function SessionDetailPage() {
   const [data, setData] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'metrics' | 'plots' | 'video'>('metrics')
+  const [activeTab, setActiveTab] = useState<'report' | 'video'>('report')
   const [activeImageModal, setActiveImageModal] = useState<{ src: string; title: string } | null>(null)
-
-  // Interactive CSV Telemetry State
-  const [csvData, setCsvData] = useState<GaitCsvRow[]>([])
 
   // Patient Name Editing State
   const [isEditingName, setIsEditingName] = useState(false)
   const [editNameValue, setEditNameValue] = useState('')
   const [savingName, setSavingName] = useState(false)
-
-  useEffect(() => {
-    if (data?.csv_url) {
-      fetchGaitCsv(getStaticUrl(data.csv_url), 1)
-        .then(setCsvData)
-        .catch(() => {})
-    }
-  }, [data])
 
   useEffect(() => {
     if (!getToken()) {
@@ -104,7 +87,7 @@ export default function SessionDetailPage() {
     return (
       <AppShell>
         <div className="p-12 text-center text-[13px] text-[#6E6E73] font-sans">
-          Loading session biomechanics telemetry details…
+          Loading session report telemetry…
         </div>
       </AppShell>
     )
@@ -124,14 +107,21 @@ export default function SessionDetailPage() {
     )
   }
 
-  const { meta, report, images, docx_url, csv_url } = data
-
-  const meanConf = meta.mean_confidence || report?.tracking?.mean || 0
-  const confTier = getConfidenceTier(meanConf)
+  const { meta, report, images, docx_url } = data
   const videoUrl = `/sessions/${dateStr}/${sessionNum}/output_annotated.mp4`
 
   const hasRealName = meta.patient_name && meta.patient_name !== 'Unknown Patient'
   const patientDisplayName = hasRealName ? meta.patient_name! : 'Unassigned Patient'
+
+  // Formatting helpers for Section 1 Overview
+  const leftTiming = report?.step_timing?.left
+  const rightTiming = report?.step_timing?.right
+  const leftIntervalStr = leftTiming?.mean ? `${leftTiming.mean}s ± ${leftTiming.std}s` : 'N/A'
+  const rightIntervalStr = rightTiming?.mean ? `${rightTiming.mean}s ± ${rightTiming.std}s` : 'N/A'
+
+  // Tracking quality tier
+  const meanConfPct = report?.tracking?.mean ? report.tracking.mean * 100 : 0
+  const trackingTier = getConfidenceTier(report?.tracking?.mean)
 
   return (
     <AppShell>
@@ -139,7 +129,7 @@ export default function SessionDetailPage() {
         {/* Header Card (24px Padding, 8px Radius, 1px Border) */}
         <div className="bg-[#FFFFFF] p-[24px] border border-[#E5E5E7] rounded-[8px]">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            {/* Title & Back Arrow Row (18px Arrow & Title, Single Row, 12px Gaps) */}
+            {/* Title & Back Arrow Row */}
             <div className="flex items-start gap-[12px] min-w-0">
               <Link 
                 href="/sessions" 
@@ -195,7 +185,7 @@ export default function SessionDetailPage() {
                   )}
                 </div>
 
-                {/* Meta Row Below (13px/400 #6E6E73, 8px Margin-Top) */}
+                {/* Meta Row Below */}
                 <div className="text-[13px] font-[400] text-[#6E6E73] mt-[8px] flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>Recorded: <strong className="font-[500] text-[#1D1D1F]">{meta.recorded_date || meta.date}</strong> {meta.recorded_time ? `at ${meta.recorded_time}` : ''}</span>
                   <span>·</span>
@@ -206,25 +196,14 @@ export default function SessionDetailPage() {
               </div>
             </div>
 
-            {/* Action Buttons Row (36px Height, 8px Gap) */}
+            {/* Action Row — EXACTLY ONE BUTTON: Download Report (.docx) */}
             <div className="flex items-center gap-[8px] shrink-0">
-              {csv_url && (
-                <a
-                  href={getStaticUrl(csv_url)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="h-[36px] px-[14px] bg-[#FFFFFF] border border-[#E5E5E7] hover:bg-[#FAFAFA] text-[#1D1D1F] rounded-[6px] text-[13px] font-[500] flex items-center gap-[6px] transition-all"
-                >
-                  <FileSpreadsheet className="w-[14px] h-[14px] text-[#6E6E73]" />
-                  <span>CSV Telemetry</span>
-                </a>
-              )}
               {docx_url && (
                 <a
                   href={getStaticUrl(docx_url)}
                   target="_blank"
                   rel="noreferrer"
-                  className="h-[36px] px-[16px] bg-[#0B6E4F] hover:opacity-90 text-white rounded-[6px] text-[13px] font-[500] flex items-center gap-[6px] transition-all cursor-pointer"
+                  className="h-[36px] px-[16px] bg-[#0B6E4F] hover:opacity-90 text-white rounded-[6px] text-[13px] font-[500] flex items-center gap-[6px] transition-all cursor-pointer shadow-xs"
                 >
                   <Download className="w-[14px] h-[14px]" />
                   <span>Download Report (.docx)</span>
@@ -233,30 +212,18 @@ export default function SessionDetailPage() {
             </div>
           </div>
 
-          {/* Navigation Tabs (36px Height, 8px Gap, 20px Margin-Top) */}
+          {/* Navigation Tabs — TWO TABS ONLY: Report & Annotated Gait Video */}
           <div className="flex items-center gap-[8px] border-t border-[#E5E5E7] pt-[16px] mt-[20px]">
             <button
-              onClick={() => setActiveTab('metrics')}
+              onClick={() => setActiveTab('report')}
               className={`h-[36px] px-[16px] text-[13px] font-[500] rounded-[6px] flex items-center gap-[6px] transition-all cursor-pointer ${
-                activeTab === 'metrics'
+                activeTab === 'report'
                   ? 'bg-[#0B6E4F] text-white'
                   : 'bg-transparent text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#FAFAFA]'
               }`}
             >
-              <BarChart3 className="w-[14px] h-[14px]" />
-              <span>Clinical Metrics & ROM</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('plots')}
-              className={`h-[36px] px-[16px] text-[13px] font-[500] rounded-[6px] flex items-center gap-[6px] transition-all cursor-pointer ${
-                activeTab === 'plots'
-                  ? 'bg-[#0B6E4F] text-white'
-                  : 'bg-transparent text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#FAFAFA]'
-              }`}
-            >
-              <Activity className="w-[14px] h-[14px]" />
-              <span>Biomechanics Figures ({images ? 4 : 0})</span>
+              <FileText className="w-[14px] h-[14px]" />
+              <span>Report</span>
             </button>
 
             <button
@@ -273,250 +240,337 @@ export default function SessionDetailPage() {
           </div>
         </div>
 
-        {/* TAB 1: Clinical Metrics & ROM */}
-        {activeTab === 'metrics' && (
-          <div className="space-y-6">
-            {/* Stat Cards Row (4-Column Grid, 12px Gap) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[12px]">
-              {/* Card 1: Session Duration */}
-              <div className="bg-[#FFFFFF] p-[16px] border border-[#E5E5E7] rounded-[8px]">
-                <span className="text-[12px] font-[500] text-[#6E6E73] uppercase tracking-[0.02em] block">
-                  Session Duration
-                </span>
-                <span className="text-[20px] font-[600] text-[#1D1D1F] mt-[4px] block">
-                  {meta.duration_sec || report?.total_time_sec || 0}s
-                </span>
-                <span className="text-[11px] font-[400] text-[#6E6E73] mt-[4px] block">
-                  {meta.fps || report?.fps || 30} FPS Rate
-                </span>
-              </div>
+        {/* TAB 1: Rebuilt Clinical Report (Section for Section per docx spec) */}
+        {activeTab === 'report' && (
+          <div className="space-y-[32px]">
 
-              {/* Card 2: Steps Detected */}
-              <div className="bg-[#FFFFFF] p-[16px] border border-[#E5E5E7] rounded-[8px]">
-                <span className="text-[12px] font-[500] text-[#6E6E73] uppercase tracking-[0.02em] block">
-                  Steps Detected
-                </span>
-                <span className="text-[20px] font-[600] text-[#0B6E4F] mt-[4px] block">
-                  {report?.total_steps || 0}
-                </span>
-                <span className="text-[11px] font-[400] text-[#6E6E73] mt-[4px] block">
-                  Left: {report?.left_steps || 0} · Right: {report?.right_steps || 0}
-                </span>
-              </div>
+            {/* SECTION 1: Session Overview */}
+            <div>
+              <h2 className="text-[16px] font-[600] text-[#1D1D1F] border-b-2 border-[#0B6E4F] pb-[4px] mt-[8px] mb-[16px]">
+                1. Session Overview
+              </h2>
+              <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] p-[20px]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-[24px] gap-y-[16px] text-left">
+                  <div>
+                    <span className="text-[12px] font-[500] text-[#6E6E73] block">Duration</span>
+                    <span className="text-[14px] font-[600] text-[#1D1D1F] block mt-[2px]">
+                      {report?.total_time_sec || meta.duration_sec || 0}s
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[12px] font-[500] text-[#6E6E73] block">Frame rate</span>
+                    <span className="text-[14px] font-[600] text-[#1D1D1F] block mt-[2px]">
+                      {report?.fps || meta.fps || 30} FPS
+                    </span>
+                  </div>
 
-              {/* Card 3: Walking Cadence */}
-              <div className="bg-[#FFFFFF] p-[16px] border border-[#E5E5E7] rounded-[8px]">
-                <span className="text-[12px] font-[500] text-[#6E6E73] uppercase tracking-[0.02em] block">
-                  Walking Cadence
-                </span>
-                <span className="text-[20px] font-[600] text-[#0B6E4F] mt-[4px] block">
-                  {meta.cadence_spm || report?.cadence_steps_per_min || 0} <span className="text-[12px] font-[400] text-[#6E6E73]">spm</span>
-                </span>
-                <span className="text-[11px] font-[400] text-[#6E6E73] mt-[4px] block">
-                  Physiological pace
-                </span>
-              </div>
+                  <div>
+                    <span className="text-[12px] font-[500] text-[#6E6E73] block">Total frames</span>
+                    <span className="text-[14px] font-[600] text-[#1D1D1F] block mt-[2px]">
+                      {report?.total_frames || 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[12px] font-[500] text-[#6E6E73] block">Total steps</span>
+                    <span className="text-[14px] font-[600] text-[#1D1D1F] block mt-[2px]">
+                      {report?.total_steps || 0}
+                    </span>
+                  </div>
 
-              {/* Card 4: Tracking Confidence */}
-              <div className="bg-[#FFFFFF] p-[16px] border border-[#E5E5E7] rounded-[8px]">
-                <span className="text-[12px] font-[500] text-[#6E6E73] uppercase tracking-[0.02em] block">
-                  Tracking Confidence
-                </span>
-                <div className="mt-[4px]">
-                  <span 
-                    className="text-[11px] font-[500] px-[8px] py-[2px] rounded-[4px] inline-block"
-                    style={{ color: confTier.textColor, backgroundColor: confTier.bgColor }}
-                  >
-                    {confTier.fullLabel}
-                  </span>
+                  <div>
+                    <span className="text-[12px] font-[500] text-[#6E6E73] block">Left / Right steps</span>
+                    <span className="text-[14px] font-[600] text-[#1D1D1F] block mt-[2px]">
+                      {report?.left_steps || 0} L / {report?.right_steps || 0} R
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[12px] font-[500] text-[#6E6E73] block">Cadence</span>
+                    <span className="text-[14px] font-[600] text-[#0B6E4F] block mt-[2px]">
+                      {report?.cadence_steps_per_min || meta.cadence_spm || 0} spm
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[12px] font-[500] text-[#6E6E73] block">Left step interval (mean ± std)</span>
+                    <span className="text-[14px] font-[600] text-[#1D1D1F] block mt-[2px]">
+                      {leftIntervalStr}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[12px] font-[500] text-[#6E6E73] block">Right step interval (mean ± std)</span>
+                    <span className="text-[14px] font-[600] text-[#1D1D1F] block mt-[2px]">
+                      {rightIntervalStr}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-[11px] font-[400] text-[#6E6E73] mt-[4px] block">
-                  {report?.tracking?.good_frames || 0} / {report?.tracking?.total_frames || 0} visible frames
-                </span>
               </div>
             </div>
 
-            {/* Joint ROM & Asymmetry Section (Bounded Cards) */}
+            {/* SECTION 2: Range of Motion & Asymmetry */}
             {report && (
-              <div className="space-y-3">
-                <h2 className="text-[14px] font-[600] text-[#1D1D1F]">Joint Range of Motion (ROM) & Asymmetry</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-[12px]">
-                  {(['knee', 'hip', 'ankle'] as const).map((j) => {
-                    const romL = report.rom?.[j]?.left || 0
-                    const romR = report.rom?.[j]?.right || 0
-                    const asym = report.asymmetry_deg?.[j] || 0
-                    const corr = report.correlation?.[j]
-                    const asymTier = getAsymmetryTier(asym)
-                    const jointTitle = j.charAt(0).toUpperCase() + j.slice(1)
+              <div>
+                <h2 className="text-[16px] font-[600] text-[#1D1D1F] border-b-2 border-[#0B6E4F] pb-[4px] mt-[32px] mb-[16px]">
+                  2. Range of Motion & Asymmetry
+                </h2>
+                <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-[13px] border-collapse">
+                      <thead>
+                        <tr className="bg-[#0B6E4F] text-white font-[600]">
+                          <th className="p-[10px_12px] font-[600]">Joint</th>
+                          <th className="p-[10px_12px] font-[600] text-center">Left ROM</th>
+                          <th className="p-[10px_12px] font-[600] text-center">Right ROM</th>
+                          <th className="p-[10px_12px] font-[600] text-center">Asym (°)</th>
+                          <th className="p-[10px_12px] font-[600] text-center">Asym %</th>
+                          <th className="p-[10px_12px] font-[600] text-center">Mean L</th>
+                          <th className="p-[10px_12px] font-[600] text-center">Mean R</th>
+                          <th className="p-[10px_12px] font-[600] text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E5E7]">
+                        {(['knee', 'hip', 'ankle'] as const).map((j) => {
+                          const romL = report.rom?.[j]?.left || 0
+                          const romR = report.rom?.[j]?.right || 0
+                          const meanL = report.mean_angles?.[j]?.left ?? 'N/A'
+                          const meanR = report.mean_angles?.[j]?.right ?? 'N/A'
+                          const asymDeg = report.asymmetry_deg?.[j] || 0
+                          
+                          const maxRom = Math.max(romL, romR)
+                          const asymPct = maxRom > 0 ? (asymDeg / maxRom) * 100 : 0
+                          const formattedAsymPct = `${asymPct.toFixed(1)}%`
 
-                    return (
-                      <div key={j} className="bg-[#FFFFFF] p-[16px] border border-[#E5E5E7] rounded-[8px] space-y-3">
-                        {/* Header Row: Joint Name Left, Asymmetry Badge Right */}
-                        <div className="flex items-center justify-between border-b border-[#E5E5E7] pb-[10px]">
-                          <h3 className="text-[15px] font-[600] text-[#1D1D1F]">{jointTitle} Joint</h3>
-                          <span 
-                            className="text-[11px] font-[500] px-[8px] py-[2px] rounded-[4px]"
-                            style={{ color: asymTier.textColor, backgroundColor: asymTier.bgColor }}
-                          >
-                            {asymTier.label}
-                          </span>
-                        </div>
+                          let statusText = 'Typical'
+                          let tierBg = '#E7F5EA'
+                          let tierColor = '#1E7B34'
 
-                        {/* ROM Values (2-Column Grid, 12px Gap, 12px Margin-Top) */}
-                        <div className="grid grid-cols-2 gap-[12px] mt-[12px] text-center">
-                          <div className="p-[10px] bg-[#FAFAFA] border border-[#E5E5E7] rounded-[6px]">
-                            <span className="text-[11px] font-[500] text-[#6E6E73] uppercase tracking-[0.02em] block">LEFT ROM</span>
-                            <span className="text-[18px] font-[600] text-[#0B6E4F] mt-[2px] block">{romL}°</span>
-                          </div>
-                          <div className="p-[10px] bg-[#FAFAFA] border border-[#E5E5E7] rounded-[6px]">
-                            <span className="text-[11px] font-[500] text-[#6E6E73] uppercase tracking-[0.02em] block">RIGHT ROM</span>
-                            <span className="text-[18px] font-[600] text-[#0B6E4F] mt-[2px] block">{romR}°</span>
-                          </div>
-                        </div>
+                          if (asymPct >= 20) {
+                            statusText = 'Notable Asymmetry'
+                            tierBg = '#FCEAE9'
+                            tierColor = '#B3261E'
+                          } else if (asymPct >= 10) {
+                            statusText = 'Mild Asymmetry'
+                            tierBg = '#FFF4E0'
+                            tierColor = '#9C6B00'
+                          }
 
-                        {/* Asymmetry + Correlation (2-Column Row, 12px Margin-Top) */}
-                        <div className="grid grid-cols-2 gap-[12px] mt-[12px] pt-[8px] border-t border-[#E5E5E7] text-[13px]">
-                          <div>
-                            <span className="text-[11px] font-[500] text-[#6E6E73] block">L-R Asymmetry</span>
-                            <span className="font-[600] text-[#1D1D1F] block mt-[2px]">{asym}°</span>
-                          </div>
-                          <div>
-                            <span className="text-[11px] font-[500] text-[#6E6E73] block">L-R Pearson Correlation</span>
-                            {corr != null && typeof corr === 'number' ? (
-                              <span className="font-[600] text-[#0B6E4F] block mt-[2px]">{corr}</span>
-                            ) : (
-                              <span className="text-[12px] font-[400] text-[#6E6E73] italic block mt-[2px]">
-                                Insufficient tracked frames for correlation
-                              </span>
-                            )}
-                          </div>
+                          const jointLabel = j.charAt(0).toUpperCase() + j.slice(1)
+
+                          return (
+                            <tr key={j} className="hover:bg-[#FAFAFA]">
+                              <td className="p-[10px_12px] font-[600] text-[#1D1D1F]">{jointLabel}</td>
+                              <td className="p-[10px_12px] text-center font-[500]">{romL}°</td>
+                              <td className="p-[10px_12px] text-center font-[500]">{romR}°</td>
+                              <td className="p-[10px_12px] text-center font-[600] text-[#1D1D1F]">{asymDeg}°</td>
+                              <td 
+                                className="p-[10px_12px] text-center font-[600]"
+                                style={{ backgroundColor: tierBg, color: tierColor }}
+                              >
+                                {formattedAsymPct}
+                              </td>
+                              <td className="p-[10px_12px] text-center font-[400] text-[#6E6E73]">{meanL !== 'N/A' ? `${meanL}°` : 'N/A'}</td>
+                              <td className="p-[10px_12px] text-center font-[400] text-[#6E6E73]">{meanR !== 'N/A' ? `${meanR}°` : 'N/A'}</td>
+                              <td className="p-[10px_12px] text-center">
+                                <span 
+                                  className="inline-block px-[8px] py-[2px] rounded-[4px] text-[11px] font-[500]"
+                                  style={{ backgroundColor: tierBg, color: tierColor }}
+                                >
+                                  {statusText}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Legend Row Below Table */}
+                <div className="text-[12px] text-[#6E6E73] mt-[8px] flex items-center gap-[6px]">
+                  <span className="w-[8px] h-[8px] rounded-full bg-[#0B6E4F] inline-block" />
+                  <span>&lt; 10% typical / 10–20% mild asymmetry / ≥ 20% notable asymmetry</span>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 3: Pelvis Movement */}
+            {report?.pelvis && (
+              <div>
+                <h2 className="text-[16px] font-[600] text-[#1D1D1F] border-b-2 border-[#0B6E4F] pb-[4px] mt-[32px] mb-[16px]">
+                  3. Pelvis Movement
+                </h2>
+                <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] overflow-hidden">
+                  <table className="w-full text-left text-[13px] border-collapse">
+                    <thead>
+                      <tr className="bg-[#0B6E4F] text-white font-[600]">
+                        <th className="p-[10px_12px] font-[600] text-center">Pelvis Tilt ROM</th>
+                        <th className="p-[10px_12px] font-[600] text-center">Pelvis Rotation ROM</th>
+                        <th className="p-[10px_12px] font-[600] text-center">Mean Tilt</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="p-[10px_12px] text-center font-[600] text-[#1D1D1F] text-[14px]">
+                          {report.pelvis.tilt_rom_deg}°
+                        </td>
+                        <td className="p-[10px_12px] text-center font-[600] text-[#1D1D1F] text-[14px]">
+                          {report.pelvis.rotation_rom_deg}°
+                        </td>
+                        <td className="p-[10px_12px] text-center font-[600] text-[#1D1D1F] text-[14px]">
+                          {report.pelvis.mean_tilt_deg || 0}°
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 4: Tracking Quality */}
+            {report?.tracking && (
+              <div>
+                <h2 className="text-[16px] font-[600] text-[#1D1D1F] border-b-2 border-[#0B6E4F] pb-[4px] mt-[32px] mb-[16px]">
+                  4. Tracking Quality
+                </h2>
+                <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] overflow-hidden">
+                  <table className="w-full text-left text-[13px] border-collapse">
+                    <thead>
+                      <tr className="bg-[#0B6E4F] text-white font-[600]">
+                        <th className="p-[10px_12px] font-[600] text-center">Mean Confidence</th>
+                        <th className="p-[10px_12px] font-[600] text-center">Min Confidence</th>
+                        <th className="p-[10px_12px] font-[600] text-center">Good Frames (&gt;70%)</th>
+                        <th className="p-[10px_12px] font-[600] text-center">Good Frame %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td 
+                          className="p-[10px_12px] text-center font-[600]"
+                          style={{ backgroundColor: trackingTier.bgColor, color: trackingTier.textColor }}
+                        >
+                          {trackingTier.pctText} ({trackingTier.label})
+                        </td>
+                        <td className="p-[10px_12px] text-center font-[500] text-[#1D1D1F]">
+                          {report.tracking.min ? `${(report.tracking.min * 100).toFixed(1)}%` : 'N/A'}
+                        </td>
+                        <td className="p-[10px_12px] text-center font-[500] text-[#1D1D1F]">
+                          {report.tracking.good_frames || 0} / {report.tracking.total_frames || 0}
+                        </td>
+                        <td className="p-[10px_12px] text-center font-[500] text-[#1D1D1F]">
+                          {report.tracking.total_frames ? `${((report.tracking.good_frames / report.tracking.total_frames) * 100).toFixed(1)}%` : '0%'}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Conditional Note Below Table */}
+                {meanConfPct < 50 ? (
+                  <p className="text-[12px] italic text-[#6E6E73] mt-[8px]">
+                    Treat joint-angle figures as indicative, not precise due to low tracking confidence (&lt;50%).
+                  </p>
+                ) : (
+                  <p className="text-[12px] italic text-[#6E6E73] mt-[8px]">
+                    Tracking confidence was adequate for quantitative comparison across sessions.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* SECTION 5: Left-Right Symmetry (Correlation) */}
+            {report?.correlation && (
+              <div>
+                <h2 className="text-[16px] font-[600] text-[#1D1D1F] border-b-2 border-[#0B6E4F] pb-[4px] mt-[32px] mb-[16px]">
+                  5. Left-Right Symmetry (Correlation)
+                </h2>
+                <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] overflow-hidden">
+                  <table className="w-full text-left text-[13px] border-collapse">
+                    <thead>
+                      <tr className="bg-[#0B6E4F] text-white font-[600]">
+                        <th className="p-[10px_12px] font-[600] text-center">Knee L-R Correlation</th>
+                        <th className="p-[10px_12px] font-[600] text-center">Hip L-R Correlation</th>
+                        <th className="p-[10px_12px] font-[600] text-center">Ankle L-R Correlation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {(['knee', 'hip', 'ankle'] as const).map((j) => {
+                          const val = report.correlation?.[j]
+                          return (
+                            <td key={j} className="p-[10px_12px] text-center font-[600] text-[#1D1D1F]">
+                              {val != null && typeof val === 'number' ? (
+                                <span className="text-[#0B6E4F] font-[600]">{val}</span>
+                              ) : (
+                                <span className="text-[12px] font-[400] text-[#6E6E73] italic">
+                                  Insufficient data
+                                </span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 6: Visual Summary (Stacked 4 Figures) */}
+            {images && (
+              <div>
+                <h2 className="text-[16px] font-[600] text-[#1D1D1F] border-b-2 border-[#0B6E4F] pb-[4px] mt-[32px] mb-[16px]">
+                  6. Visual Summary
+                </h2>
+                <div className="space-y-[24px]">
+                  {[
+                    { 
+                      id: 'comprehensive', 
+                      title: 'Figure 1. Full joint-angle, step-detection, and asymmetry timeline overview.', 
+                      src: images.comprehensive 
+                    },
+                    { 
+                      id: 'knee', 
+                      title: 'Figure 2. Left vs Right knee flexion time-series curves and angle distribution.', 
+                      src: images.knee 
+                    },
+                    { 
+                      id: 'hip', 
+                      title: 'Figure 3. Left vs Right hip flexion time-series curves and angle distribution.', 
+                      src: images.hip 
+                    },
+                    { 
+                      id: 'ankle', 
+                      title: 'Figure 4. Left vs Right ankle dorsiflexion time-series curves and angle distribution.', 
+                      src: images.ankle 
+                    },
+                  ].map((fig) => (
+                    <div key={fig.id} className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] p-[16px]">
+                      <div 
+                        className="relative cursor-pointer rounded-[6px] overflow-hidden border border-[#E5E5E7] bg-[#FAFAFA] group"
+                        onClick={() => setActiveImageModal({ src: getStaticUrl(fig.src), title: fig.title })}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={getStaticUrl(fig.src)} 
+                          alt={fig.title} 
+                          className="w-full h-auto object-cover group-hover:scale-[1.01] transition-transform duration-200" 
+                        />
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5">
+                          <Maximize2 className="w-4 h-4" /> Click to expand high-resolution figure
                         </div>
                       </div>
-                    )
-                  })}
+                      <p className="text-[12px] italic text-[#6E6E73] text-center mt-[12px]">
+                        {fig.title}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
-
-            {/* Pelvis Movement Card */}
-            {report?.pelvis && (
-              <div className="bg-[#FFFFFF] p-[16px] border border-[#E5E5E7] rounded-[8px] space-y-3">
-                <h3 className="text-[14px] font-[600] text-[#1D1D1F]">Pelvis & Core Kinematics</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-[12px] text-[13px]">
-                  <div className="p-[12px] bg-[#FAFAFA] border border-[#E5E5E7] rounded-[6px] flex items-center justify-between">
-                    <span className="text-[#6E6E73]">Pelvis Tilt ROM</span>
-                    <span className="font-[600] text-[#1D1D1F] text-[16px]">{report.pelvis.tilt_rom_deg}°</span>
-                  </div>
-                  <div className="p-[12px] bg-[#FAFAFA] border border-[#E5E5E7] rounded-[6px] flex items-center justify-between">
-                    <span className="text-[#6E6E73]">Pelvis Rotation ROM</span>
-                    <span className="font-[600] text-[#1D1D1F] text-[16px]">{report.pelvis.rotation_rom_deg}°</span>
-                  </div>
-                  <div className="p-[12px] bg-[#FAFAFA] border border-[#E5E5E7] rounded-[6px] flex items-center justify-between">
-                    <span className="text-[#6E6E73]">Mean Pelvis Tilt</span>
-                    <span className="font-[600] text-[#1D1D1F] text-[16px]">{report.pelvis.mean_tilt_deg || 0}°</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3 SEPARATE LIVE GRAPHS: Knees, Hips, Ankles */}
-            <div className="space-y-4">
-              <div className="border-b border-[#E5E5E7] pb-3">
-                <h3 className="text-[16px] font-[600] text-[#1D1D1F] flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-[#0B6E4F]" />
-                  3 Live Joint Trajectory Telemetry Graphs
-                </h3>
-                <p className="text-[13px] font-[400] text-[#6E6E73] mt-[2px]">Interactive frame-by-frame joint angle trajectories (Left vs Right)</p>
-              </div>
-
-              {csvData.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-[16px]">
-                  {/* Graph 1: Knee */}
-                  <div className="bg-[#FFFFFF] p-[16px] rounded-[8px] border border-[#E5E5E7] space-y-3">
-                    <div className="flex items-center justify-between border-b border-[#E5E5E7] pb-[8px]">
-                      <h4 className="text-[13px] font-[600] text-[#1D1D1F]">1. Knee Joint Flexion Curve</h4>
-                      <span className="text-[11px] font-[500] text-[#0B6E4F] bg-[#E7F5EA] px-2 py-0.5 rounded-[4px]">Left vs Right</span>
-                    </div>
-                    <JointTimeSeriesChart data={csvData} joint="knee" height={240} />
-                  </div>
-
-                  {/* Graph 2: Hip */}
-                  <div className="bg-[#FFFFFF] p-[16px] rounded-[8px] border border-[#E5E5E7] space-y-3">
-                    <div className="flex items-center justify-between border-b border-[#E5E5E7] pb-[8px]">
-                      <h4 className="text-[13px] font-[600] text-[#1D1D1F]">2. Hip Joint Flexion Curve</h4>
-                      <span className="text-[11px] font-[500] text-[#0B6E4F] bg-[#E7F5EA] px-2 py-0.5 rounded-[4px]">Left vs Right</span>
-                    </div>
-                    <JointTimeSeriesChart data={csvData} joint="hip" height={240} />
-                  </div>
-
-                  {/* Graph 3: Ankle */}
-                  <div className="bg-[#FFFFFF] p-[16px] rounded-[8px] border border-[#E5E5E7] space-y-3">
-                    <div className="flex items-center justify-between border-b border-[#E5E5E7] pb-[8px]">
-                      <h4 className="text-[13px] font-[600] text-[#1D1D1F]">3. Ankle Joint Angle Curve</h4>
-                      <span className="text-[11px] font-[500] text-[#0B6E4F] bg-[#E7F5EA] px-2 py-0.5 rounded-[4px]">Left vs Right</span>
-                    </div>
-                    <JointTimeSeriesChart data={csvData} joint="ankle" height={240} />
-                  </div>
-                </div>
-              ) : (
-                <div className="p-8 text-center text-[13px] text-[#6E6E73] bg-[#FFFFFF] rounded-[8px] border border-dashed border-[#E5E5E7]">
-                  Loading live CSV joint telemetry data...
-                </div>
-              )}
-            </div>
           </div>
         )}
 
-        {/* TAB 2: Biomechanics Figures Grid */}
-        {activeTab === 'plots' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[16px] font-[600] text-[#1D1D1F]">Matplotlib Joint Angle Plots & Time-Series Visualizations</h2>
-              <span className="text-[13px] font-[400] text-[#6E6E73]">Click any plot to inspect in high-resolution lightbox</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-[16px]">
-              {[
-                { id: 'comprehensive', title: 'Figure 1: Comprehensive Gait Timeline & Asymmetry', src: images.comprehensive, desc: 'Overall joint angle trajectories over time, step event detection, and L-R asymmetry.' },
-                { id: 'knee', title: 'Figure 2: Knee Joint Flexion & Extension Analysis', src: images.knee, desc: 'Left vs Right knee flexion time-series curves and angle frequency distribution.' },
-                { id: 'hip', title: 'Figure 3: Hip Joint Flexion & Extension Analysis', src: images.hip, desc: 'Left vs Right hip extension curves and angular frequency distribution.' },
-                { id: 'ankle', title: 'Figure 4: Ankle Dorsiflexion & Plantarflexion Analysis', src: images.ankle, desc: 'Left vs Right ankle dorsiflexion time-series and angular distribution.' },
-              ].map((fig) => (
-                <div key={fig.id} className="bg-[#FFFFFF] overflow-hidden p-[16px] border border-[#E5E5E7] rounded-[8px] flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-[13px] font-[600] text-[#1D1D1F]">{fig.title}</h3>
-                      <button
-                        onClick={() => setActiveImageModal({ src: getStaticUrl(fig.src), title: fig.title })}
-                        className="p-1 rounded-[4px] text-[#6E6E73] hover:text-[#0B6E4F] hover:bg-[#FAFAFA] transition-colors"
-                        title="Expand Image"
-                      >
-                        <Maximize2 className="w-[14px] h-[14px]" />
-                      </button>
-                    </div>
-                    <p className="text-[12px] font-[400] text-[#6E6E73] mb-[12px]">{fig.desc}</p>
-                  </div>
-                  <div 
-                    className="relative cursor-pointer rounded-[6px] overflow-hidden border border-[#E5E5E7] bg-[#FAFAFA] group"
-                    onClick={() => setActiveImageModal({ src: getStaticUrl(fig.src), title: fig.title })}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={getStaticUrl(fig.src)} 
-                      alt={fig.title} 
-                      className="w-full h-auto object-cover group-hover:scale-[1.02] transition-transform duration-200" 
-                    />
-                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold">
-                      Click to expand
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: Annotated Gait Video */}
+        {/* TAB 2: Annotated Gait Video */}
         {activeTab === 'video' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
