@@ -120,6 +120,34 @@ async def update_session_patient_name(
     with open(meta_file, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
+    # Update report_data.json & regenerate report.docx
+    if data_file.exists():
+        try:
+            from report_module import generate_docx_report
+            with open(data_file, "r", encoding="utf-8") as f:
+                report_data = json.load(f)
+            report_data["patient_name"] = new_patient_name
+            report_data["session_label"] = meta["session_label"]
+            with open(data_file, "w", encoding="utf-8") as f:
+                json.dump(report_data, f, indent=2)
+
+            report_docx = session_dir / "report.docx"
+            comp_png = session_dir / "gait_analysis_comprehensive.png"
+            knee_png = session_dir / "knee_analysis_detailed.png"
+            hip_png = session_dir / "hip_analysis_detailed.png"
+            ankle_png = session_dir / "ankle_analysis_detailed.png"
+
+            generate_docx_report(
+                report_data=report_data,
+                out_path=str(report_docx),
+                comprehensive_png=str(comp_png) if comp_png.exists() else None,
+                knee_png=str(knee_png) if knee_png.exists() else None,
+                hip_png=str(hip_png) if hip_png.exists() else None,
+                ankle_png=str(ankle_png) if ankle_png.exists() else None,
+            )
+        except Exception as e:
+            print(f"⚠ Warning: Could not regenerate report.docx: {e}")
+
     # Update index.json
     if index_file.exists():
         with open(index_file, "r", encoding="utf-8") as f:

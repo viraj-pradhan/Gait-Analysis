@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
+import { JointTimeSeriesChart } from '@/components/charts/JointTimeSeriesChart'
+import { fetchGaitCsv, GaitCsvRow } from '@/lib/csv'
 import { getToken, getSessionDetail, getStaticUrl, updateSessionPatientName } from '@/lib/api'
 import { getConfidenceTier } from '@/lib/badges'
 import { 
@@ -15,7 +17,11 @@ import {
   Video,
   Pencil,
   Check,
-  Maximize2
+  Maximize2,
+  Activity,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react'
 
 type SessionData = {
@@ -40,13 +46,25 @@ export default function SessionDetailPage() {
   const [data, setData] = useState<SessionData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState<'report' | 'video'>('report')
+  const [activeTab, setActiveTab] = useState<'report' | 'telemetry' | 'video'>('report')
   const [activeImageModal, setActiveImageModal] = useState<{ src: string; title: string } | null>(null)
+
+  // Interactive CSV Telemetry & Zoom State
+  const [csvData, setCsvData] = useState<GaitCsvRow[]>([])
+  const [zoomScale, setZoomScale] = useState<number>(1.0)
 
   // Patient Name Editing State
   const [isEditingName, setIsEditingName] = useState(false)
   const [editNameValue, setEditNameValue] = useState('')
   const [savingName, setSavingName] = useState(false)
+
+  useEffect(() => {
+    if (data?.csv_url) {
+      fetchGaitCsv(getStaticUrl(data.csv_url), 1)
+        .then(setCsvData)
+        .catch(() => {})
+    }
+  }, [data])
 
   useEffect(() => {
     if (!getToken()) {
@@ -212,7 +230,7 @@ export default function SessionDetailPage() {
             </div>
           </div>
 
-          {/* Navigation Tabs — TWO TABS ONLY: Report & Annotated Gait Video */}
+          {/* Navigation Tabs — THREE TABS: Report, Live Telemetry, Annotated Gait Video */}
           <div className="flex items-center gap-[8px] border-t border-[#E5E5E7] pt-[16px] mt-[20px]">
             <button
               onClick={() => setActiveTab('report')}
@@ -224,6 +242,18 @@ export default function SessionDetailPage() {
             >
               <FileText className="w-[14px] h-[14px]" />
               <span>Report</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('telemetry')}
+              className={`h-[36px] px-[16px] text-[13px] font-[500] rounded-[6px] flex items-center gap-[6px] transition-all cursor-pointer ${
+                activeTab === 'telemetry'
+                  ? 'bg-[#0B6E4F] text-white'
+                  : 'bg-transparent text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#FAFAFA]'
+              }`}
+            >
+              <Activity className="w-[14px] h-[14px]" />
+              <span>Live Telemetry</span>
             </button>
 
             <button
@@ -570,7 +600,88 @@ export default function SessionDetailPage() {
           </div>
         )}
 
-        {/* TAB 2: Annotated Gait Video */}
+        {/* TAB 2: Live Joint Trajectory Telemetry (Interactive Frame-by-Frame Charts) */}
+        {activeTab === 'telemetry' && (
+          <div className="space-y-[20px]">
+            {/* Pinned 36px Height Zoom Control Toolbar inside the tab container */}
+            <div className="bg-[#FFFFFF] p-[8px_16px] border border-[#E5E5E7] rounded-[8px] flex items-center justify-between h-[36px]">
+              <div className="flex items-center gap-[6px] text-[13px] font-[500] text-[#1D1D1F]">
+                <Activity className="w-[14px] h-[14px] text-[#0B6E4F]" />
+                <span>Interactive Joint Trajectories (Left vs Right)</span>
+              </div>
+
+              {/* Zoom Controls: Readout, −/+, Reset */}
+              <div className="flex items-center gap-[8px]">
+                <span className="text-[12px] font-[500] text-[#6E6E73]">
+                  Zoom: <strong className="text-[#1D1D1F]">{Math.round(zoomScale * 100)}%</strong>
+                </span>
+
+                <button
+                  onClick={() => setZoomScale((z) => Math.max(0.6, z - 0.15))}
+                  className="w-[28px] h-[28px] rounded-[6px] border border-[#E5E5E7] bg-[#FFFFFF] hover:bg-[#FAFAFA] flex items-center justify-center text-[#1D1D1F] cursor-pointer"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-[14px] h-[14px]" />
+                </button>
+
+                <button
+                  onClick={() => setZoomScale((z) => Math.min(2.0, z + 0.15))}
+                  className="w-[28px] h-[28px] rounded-[6px] border border-[#E5E5E7] bg-[#FFFFFF] hover:bg-[#FAFAFA] flex items-center justify-center text-[#1D1D1F] cursor-pointer"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-[14px] h-[14px]" />
+                </button>
+
+                <button
+                  onClick={() => setZoomScale(1.0)}
+                  className="text-[12px] font-[500] text-[#0B6E4F] hover:underline flex items-center gap-[4px] ml-[4px] cursor-pointer"
+                  title="Reset Zoom Scale"
+                >
+                  <RotateCcw className="w-[12px] h-[12px]" />
+                  <span>Reset</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 3 Joint Chart Cards (20px gap, 340px fixed chart height, 20px padding) */}
+            {csvData.length > 0 ? (
+              <div className="space-y-[20px]">
+                {/* Chart 1: Knee */}
+                <div className="bg-[#FFFFFF] p-[20px] rounded-[8px] border border-[#E5E5E7]">
+                  <div className="flex items-center justify-between mb-[16px]">
+                    <h3 className="text-[14px] font-[600] text-[#1D1D1F]">1. Knee Joint Flexion Curve</h3>
+                    <span className="text-[12px] font-[500] text-[#6E6E73]">Left vs Right</span>
+                  </div>
+                  <JointTimeSeriesChart data={csvData} joint="knee" height={340} zoomScale={zoomScale} />
+                </div>
+
+                {/* Chart 2: Hip */}
+                <div className="bg-[#FFFFFF] p-[20px] rounded-[8px] border border-[#E5E5E7]">
+                  <div className="flex items-center justify-between mb-[16px]">
+                    <h3 className="text-[14px] font-[600] text-[#1D1D1F]">2. Hip Joint Flexion Curve</h3>
+                    <span className="text-[12px] font-[500] text-[#6E6E73]">Left vs Right</span>
+                  </div>
+                  <JointTimeSeriesChart data={csvData} joint="hip" height={340} zoomScale={zoomScale} />
+                </div>
+
+                {/* Chart 3: Ankle */}
+                <div className="bg-[#FFFFFF] p-[20px] rounded-[8px] border border-[#E5E5E7]">
+                  <div className="flex items-center justify-between mb-[16px]">
+                    <h3 className="text-[14px] font-[600] text-[#1D1D1F]">3. Ankle Joint Angle Curve</h3>
+                    <span className="text-[12px] font-[500] text-[#6E6E73]">Left vs Right</span>
+                  </div>
+                  <JointTimeSeriesChart data={csvData} joint="ankle" height={340} zoomScale={zoomScale} />
+                </div>
+              </div>
+            ) : (
+              <div className="p-10 text-center text-[13px] text-[#6E6E73] bg-[#FFFFFF] rounded-[8px] border border-dashed border-[#E5E5E7]">
+                Loading telemetry CSV frame data for live joint curves...
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: Annotated Gait Video */}
         {activeTab === 'video' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
