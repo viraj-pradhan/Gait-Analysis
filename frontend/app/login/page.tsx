@@ -1,213 +1,240 @@
 'use client'
-import { useState, FormEvent } from 'react'
+import { useState, FormEvent, FocusEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { login, setToken, setUser } from '@/lib/api'
-import { Activity, Mail, Lock, Eye, EyeOff, ShieldCheck, Sparkles, ArrowRight, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
+  const [rememberMe, setRememberMe] = useState(true)
+
+  // Validation & Auth State
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [authError, setAuthError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // Validation handlers (onBlur)
+  function validateEmailOnBlur(e: FocusEvent<HTMLInputElement>) {
+    const val = e.target.value.trim()
+    if (!val) {
+      setEmailError('Email is required.')
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+      setEmailError('Please enter a valid email address.')
+    } else {
+      setEmailError('')
+    }
+  }
+
+  function validatePasswordOnBlur(e: FocusEvent<HTMLInputElement>) {
+    const val = e.target.value
+    if (!val) {
+      setPasswordError('Password is required.')
+    } else {
+      setPasswordError('')
+    }
+  }
+
+  // Button disabled state: empty fields or active validation errors
+  const isFormValid = email.trim().length > 0 && password.length > 0 && !emailError && !passwordError
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    setError('')
+    setAuthError('')
+    setEmailError('')
+    setPasswordError('')
+
+    let valid = true
+    if (!email.trim()) {
+      setEmailError('Email is required.')
+      valid = false
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError('Please enter a valid email address.')
+      valid = false
+    }
+
+    if (!password) {
+      setPasswordError('Password is required.')
+      valid = false
+    }
+
+    if (!valid) return
+
     setLoading(true)
     try {
-      const data = await login(email, password)
+      const data = await login(email.trim(), password)
       setToken(data.access_token)
       setUser(data.user)
-      router.replace('/dashboard')
+      router.replace('/sessions')
     } catch (err: any) {
-      setError(err.message || 'Authentication failed. Please check your credentials.')
+      setAuthError(err.message || 'Incorrect email or password.')
+      setPassword('') // Clear password on failure per spec
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex bg-[#0A0F1D] text-slate-100 font-sans selection:bg-[#0B6E4F] selection:text-white">
-      {/* Left panel — Premium Clinical Branding Banner */}
-      <div className="hidden lg:flex lg:w-7/12 bg-gradient-to-br from-[#0A261E] via-[#0B4F3A] to-[#042B1E] p-16 flex-col justify-between relative overflow-hidden border-r border-emerald-900/30">
-        {/* Glowing Background Orbs */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-emerald-500/20 blur-[120px]" />
-          <div className="absolute top-1/2 right-10 w-[30rem] h-[30rem] rounded-full bg-teal-400/15 blur-[140px]" />
-          <div className="absolute -bottom-32 left-1/3 w-96 h-96 rounded-full bg-emerald-700/25 blur-[100px]" />
-          <div className="absolute inset-0 bg-[radial-gradient(#10B981_1px,transparent_1px)] [background-size:24px_24px] opacity-10" />
+    <div className="min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center p-4 font-sans antialiased text-[#1D1D1F]">
+      {/* Centered Single Card Container (Fixed 400px on desktop) */}
+      <div 
+        className="w-full sm:w-[400px] bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] p-[28px_20px] sm:p-[40px]"
+        style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)' }}
+      >
+        {/* Logo / Mark */}
+        <div className="w-[28px] h-[28px] rounded-[6px] bg-[#0B6E4F] text-white font-bold text-xs flex items-center justify-center mx-auto mb-[16px]">
+          G
         </div>
 
-        {/* Top Brand Header */}
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-[#0B6E4F] flex items-center justify-center font-black text-white text-2xl shadow-xl shadow-emerald-900/50 border border-emerald-300/30">
-              G
-            </div>
-            <div>
-              <span className="font-extrabold text-xl tracking-tight text-white block">GaitRehab</span>
-              <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-widest block">Clinical Platform</span>
-            </div>
-          </div>
-
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-emerald-300 text-xs font-semibold mb-6 backdrop-blur-md">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>AI-Powered Biomechanics Telemetry v2.4</span>
-          </div>
-
-          <h1 className="text-4xl font-extrabold tracking-tight text-white leading-tight max-w-lg">
-            Precision Underwater Gait & Joint Trajectory Intelligence
+        {/* Heading Block */}
+        <div className="text-center mb-[32px]">
+          <h1 className="text-[20px] font-[600] text-[#1D1D1F] tracking-tight">
+            Sign in to GaitRehab.
           </h1>
-          <p className="text-emerald-100/70 text-sm leading-relaxed mt-4 max-w-md">
-            Automated pose estimation, 3D joint angle ROM calculation, step detection, and automated Word report generation for rehabilitation clinics.
+          <p className="text-[13px] font-[400] text-[#6E6E73] mt-[4px]">
+            Clinical underwater gait rehabilitation records.
           </p>
         </div>
 
-        {/* Feature Highlights Grid */}
-        <div className="relative z-10 grid grid-cols-2 gap-4 my-8">
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md space-y-1">
-            <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
-              <Activity className="w-4 h-4" />
-              <span>Sub-second Pose Tracking</span>
-            </div>
-            <p className="text-xs text-slate-300/80">Real-time MediaPipe skeletal tracking with CLAHE frame enhancement.</p>
+        {/* Error Banner (Auth Failure) */}
+        {authError && (
+          <div 
+            role="alert" 
+            className="mb-[16px] bg-[#FCEAE9] border border-[#F5C6C2] rounded-[6px] p-[10px_12px] text-[13px] text-[#B3261E] flex items-center gap-[8px]"
+          >
+            <AlertCircle className="w-[14px] h-[14px] shrink-0 text-[#B3261E]" />
+            <span>{authError}</span>
+          </div>
+        )}
+
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} noValidate>
+          {/* Email Field Block */}
+          <div className="mb-[16px]">
+            <label htmlFor="email" className="block text-[13px] font-[500] text-[#1D1D1F] mb-[6px]">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                if (emailError) setEmailError('')
+              }}
+              onBlur={validateEmailOnBlur}
+              placeholder="clinician@example.com"
+              disabled={loading}
+              className={`w-full h-[40px] px-[12px] text-[14px] font-[400] text-[#1D1D1F] bg-[#FFFFFF] border rounded-[6px] placeholder:text-[#6E6E73] transition-all focus:outline-none ${
+                emailError
+                  ? 'border-[#B3261E]'
+                  : 'border-[#E5E5E7] focus:border-[#0B6E4F] focus:shadow-[0_0_0_3px_rgba(11,110,79,0.15)]'
+              }`}
+            />
+            {emailError && (
+              <p role="alert" className="text-[12px] font-[400] text-[#B3261E] mt-[4px]">
+                {emailError}
+              </p>
+            )}
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md space-y-1">
-            <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Clinical Compliance</span>
+          {/* Password Field Block */}
+          <div className="mb-[16px]">
+            <label htmlFor="password" className="block text-[13px] font-[500] text-[#1D1D1F] mb-[6px]">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value)
+                  if (passwordError) setPasswordError('')
+                }}
+                onBlur={validatePasswordOnBlur}
+                placeholder="••••••••"
+                disabled={loading}
+                className={`w-full h-[40px] pl-[12px] pr-[36px] text-[14px] font-[400] text-[#1D1D1F] bg-[#FFFFFF] border rounded-[6px] placeholder:text-[#6E6E73] transition-all focus:outline-none ${
+                  passwordError
+                    ? 'border-[#B3261E]'
+                    : 'border-[#E5E5E7] focus:border-[#0B6E4F] focus:shadow-[0_0_0_3px_rgba(11,110,79,0.15)]'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={0}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-[12px] top-1/2 -translate-y-1/2 text-[#6E6E73] hover:text-[#1D1D1F] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E4F] rounded-[4px]"
+              >
+                {showPassword ? (
+                  <EyeOff className="w-[16px] h-[16px]" />
+                ) : (
+                  <Eye className="w-[16px] h-[16px]" />
+                )}
+              </button>
             </div>
-            <p className="text-xs text-slate-300/80">Standardized ROM metrics, Pearson correlation, and automated reports.</p>
+            {passwordError && (
+              <p role="alert" className="text-[12px] font-[400] text-[#B3261E] mt-[4px]">
+                {passwordError}
+              </p>
+            )}
           </div>
-        </div>
 
-        {/* Footer info */}
-        <div className="relative z-10 pt-6 border-t border-emerald-800/40 flex items-center justify-between text-xs text-emerald-200/60 font-medium">
-          <span>© 2026 GaitRehab Clinical Suite</span>
-          <div className="flex items-center gap-4">
-            <span>HIPAA Ready</span>
-            <span>·</span>
-            <span>Multi-Joint Telemetry</span>
+          {/* Row Below Fields (Remember me & Forgot password) */}
+          <div className="flex items-center justify-between text-[13px] mb-[24px]">
+            <label htmlFor="remember" className="flex items-center gap-[6px] cursor-pointer select-none">
+              <input
+                id="remember"
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-[16px] h-[16px] rounded-[4px] accent-[#0B6E4F] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E4F]"
+              />
+              <span className="font-[400] text-[#1D1D1F]">Remember me</span>
+            </label>
+
+            <a 
+              href="#" 
+              className="font-[500] text-[#0B6E4F] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E4F] rounded-[2px]"
+            >
+              Forgot password?
+            </a>
           </div>
-        </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={!isFormValid || loading}
+            className={`w-full h-[40px] rounded-[6px] font-[500] text-[14px] text-white flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0B6E4F] ${
+              !isFormValid
+                ? 'bg-[#A8CFC0] cursor-not-allowed'
+                : 'bg-[#0B6E4F] hover:opacity-90 active:opacity-85 cursor-pointer'
+            }`}
+          >
+            {loading ? (
+              <Loader2 className="w-[16px] h-[16px] animate-spin text-white" />
+            ) : (
+              'Sign in'
+            )}
+          </button>
+        </form>
       </div>
 
-      {/* Right panel — Modern Authentication Form Card */}
-      <div className="flex-1 flex flex-col justify-between p-6 sm:p-12 bg-[#0F172A] relative">
-        <div className="hidden lg:block absolute top-6 right-6 text-xs text-slate-400 font-medium">
-          Need assistance? <a href="#" className="text-emerald-400 hover:underline">Contact Support</a>
-        </div>
-
-        <div className="w-full max-w-md mx-auto my-auto space-y-8">
-          {/* Mobile Header Logo */}
-          <div className="lg:hidden text-center space-y-2">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-[#0B6E4F] text-white font-black text-2xl mx-auto flex items-center justify-center shadow-lg shadow-emerald-950/50">
-              G
-            </div>
-            <h1 className="text-2xl font-extrabold text-white tracking-tight">GaitRehab</h1>
-            <p className="text-xs text-slate-400">Clinical Underwater Gait Intelligence</p>
-          </div>
-
-          {/* Form Header */}
-          <div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">Sign in to Account</h2>
-            <p className="text-xs text-slate-400 mt-1">Enter your clinician credentials to access patient telemetry</p>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-4 rounded-xl text-xs font-semibold text-rose-300 bg-rose-500/10 border border-rose-500/30 flex items-start gap-2.5 animate-shake">
-              <div className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-300">Email Address</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="clinician@hospital.org"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-slate-300">Password</label>
-                <a href="#" className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">
-                  Forgot password?
-                </a>
-              </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-10 py-3 bg-slate-800/80 border border-slate-700/80 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-                <input type="checkbox" className="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20" defaultChecked />
-                <span>Keep me signed in</span>
-              </label>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full h-11 bg-gradient-to-r from-emerald-500 to-[#0B6E4F] hover:from-emerald-400 hover:to-[#08553d] text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-70 cursor-pointer"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Authenticating…</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In to Dashboard</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Registration Redirect */}
-          <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 text-center text-xs text-slate-400">
-            Don&apos;t have a clinician account?{' '}
-            <Link href="/register" className="text-emerald-400 font-bold hover:underline">
-              Create New Account
-            </Link>
-          </div>
-        </div>
-
-        <div className="text-center text-[11px] text-slate-500 pt-6">
-          Encrypted TLS 1.3 · GaitRehab Medical Telemetry Server
-        </div>
+      {/* Footer Link (Centered Below Card) */}
+      <div className="mt-[20px] text-center text-[13px] text-[#6E6E73]">
+        Don&apos;t have an account?{' '}
+        <Link 
+          href="/register" 
+          className="font-[500] text-[#0B6E4F] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E4F] rounded-[2px]"
+        >
+          Request access.
+        </Link>
       </div>
     </div>
   )
