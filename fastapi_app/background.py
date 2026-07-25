@@ -2,6 +2,9 @@
 fastapi_app/background.py
 Background analysis worker: triggers run_session pipeline and updates MongoDB job state.
 Includes real-time progress updates via MongoDB for frontend polling.
+
+IMPORTANT: Heavy imports (run_session, mediapipe, cv2) are deferred to job
+execution time so FastAPI can start even if those packages are missing.
 """
 import os
 import asyncio
@@ -14,7 +17,10 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from .database import jobs_col
-from run_session import process_single_video
+
+# NOTE: Do NOT import run_session at top level.
+# It pulls in mediapipe/cv2/scipy which may not be available on all containers.
+# Import lazily inside run_analysis_job() instead.
 
 
 # In-memory progress store (job_id -> percent)
@@ -29,93 +35,78 @@ def get_progress(job_id: str) -> int:
 async def run_analysis_job(
     job_id: str, 
     video_path: str, 
-    output_dir: str, 
-    patient_name: str = None, 
-    recorded_date: str = None, 
-    recorded_time: str = None
+    patient_name: str = None,
+    recorded_date: str = None,
 ):
     """
-    Async background runner that executes session analysis and updates MongoDB.
+    Run the full gait analysis pipeline as an async background task.
+    Updates MongoDB with status and progress.
     """
+    col = jobs_col()
+
     try:
-        _progress[job_id] = 0
-
-        await jobs_col().update_one(
-            {"job_id": job_id},
-            {"$set": {"status": "processing", "progress": 0}},
+        # Mark as processing
+        await col.update_one(
+            {"_id": job_id},
+            {"$set": {"status": "processing", "started_at": datetime.now(timezone.utc).isoformat()}},
         )
+        _progress[job_id] = 5
 
-        loop = asyncio.get_event_loop()
+        # Lazy import — only when we actually need to run analysis
+        try:
+            from run_session import process_single_video
+        except ImportError as ie:
+            raise RuntimeError(
+                f"Analysis dependencies not available: {ie}. "
+                "Ensure mediapipe, opencv, scipy are installed."
+            )
 
-        # Build a progress callback that updates in-memory store + MongoDB
-        def make_progress_cb():
-            def cb(pct, frame, total):
-                _progress[job_id] = pct
-                # Fire-and-forget async MongoDB update from sync context
-                try:
-                    loop.call_soon_threadsafe(
-                        asyncio.ensure_future,
-                        jobs_col().update_one(
-                            {"job_id": job_id},
-                            {"$set": {"progress": pct}}
-                        )
-                    )
-                except Exception:
-                    pass
-            return cb
+        # Run CPU-bound pipeline in thread pool
+        loop = asyncio.get_running_loop()
+        _progress[job_id] = 10
 
-        # Run process_single_video in executor
-        meta_entry = await loop.run_in_executor(
-            None,
-            _run_session_sync,
-            video_path,
-            recorded_date,
-            patient_name or "Unknown Patient",
-            recorded_time,
-            make_progress_cb()
-        )
+        def _run():
+            return process_single_video(
+                video_path,
+                patient_name=patient_name,
+                recorded_date=recorded_date,
+                progress_callback=lambda pct: _progress.__setitem__(job_id, pct),
+            )
 
+        result = await loop.run_in_executor(None, _run)
         _progress[job_id] = 100
 
-        await jobs_col().update_one(
-            {"job_id": job_id},
-            {
-                "$set": {
-                    "status": meta_entry.get("status", "done"),
-                    "progress": 100,
-                    "finished_at": datetime.now(timezone.utc).isoformat(),
-                    "session_id": meta_entry.get("session_id"),
-                    "patient_name": meta_entry.get("patient_name"),
-                    "recorded_date": meta_entry.get("recorded_date"),
-                    "recorded_time": meta_entry.get("recorded_time"),
-                    "cadence_spm": meta_entry.get("cadence_spm"),
-                    "mean_confidence": meta_entry.get("mean_confidence"),
-                    "report_docx": meta_entry.get("report_docx"),
-                }
-            },
-        )
-    except Exception as exc:
-        tb = traceback.format_exc()
-        _progress.pop(job_id, None)
-        await jobs_col().update_one(
-            {"job_id": job_id},
-            {
-                "$set": {
-                    "status": "error",
-                    "progress": 0,
-                    "finished_at": datetime.now(timezone.utc).isoformat(),
-                    "error_message": str(exc),
-                    "traceback": tb,
-                }
-            },
+        # Determine output paths
+        session_dir = result.get("session_dir", "")
+        session_id = result.get("session_id", "")
+
+        await col.update_one(
+            {"_id": job_id},
+            {"$set": {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "session_id": session_id,
+                "session_dir": session_dir,
+                "result": {
+                    "video": result.get("video_path", ""),
+                    "xlsx": result.get("xlsx_path", ""),
+                    "docx": result.get("docx_path", ""),
+                    "session_id": session_id,
+                },
+            }},
         )
 
-
-def _run_session_sync(video_path, date_str, patient_name, time_str, progress_cb=None):
-    return process_single_video(
-        video_path=Path(video_path),
-        date_str=date_str,
-        patient_name=patient_name,
-        time_str=time_str,
-        progress_callback=progress_cb
-    )
+    except Exception as e:
+        traceback.print_exc()
+        _progress[job_id] = -1
+        try:
+            await col.update_one(
+                {"_id": job_id},
+                {"$set": {
+                    "status": "failed",
+                    "error": str(e),
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }},
+            )
+        except Exception:
+            pass
