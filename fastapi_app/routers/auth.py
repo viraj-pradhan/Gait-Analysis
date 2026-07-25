@@ -102,27 +102,26 @@ async def login(body: LoginRequest):
     user_email = body.email.strip().lower()
     user = None
 
-    # 1. Try MongoDB
-    try:
-        mongo_user = await users_col().find_one({"email": user_email})
-        if mongo_user:
-            user = {
-                "id": str(mongo_user["_id"]),
-                "name": mongo_user.get("name", "Clinician"),
-                "email": mongo_user["email"],
-                "hashed_password": mongo_user["hashed_password"],
-            }
-    except Exception as e:
-        print(f"⚠ MongoDB connection error during login: {e}")
+    # 1. Check local users.json first (instant response)
+    local_users = _get_local_users()
+    for email, udata in local_users.items():
+        if email.lower() == user_email:
+            user = udata
+            break
 
-    # 2. Fallback to local users.json if not found in Mongo or Mongo offline
+    # 2. Try MongoDB if not found in local users
     if not user:
-        local_users = _get_local_users()
-        # Case insensitive match
-        for email, udata in local_users.items():
-            if email.lower() == user_email:
-                user = udata
-                break
+        try:
+            mongo_user = await users_col().find_one({"email": user_email})
+            if mongo_user:
+                user = {
+                    "id": str(mongo_user["_id"]),
+                    "name": mongo_user.get("name", "Clinician"),
+                    "email": mongo_user["email"],
+                    "hashed_password": mongo_user["hashed_password"],
+                }
+        except Exception as e:
+            print(f"⚠ MongoDB connection error during login: {e}")
 
     # 3. If credentials missing or invalid
     if not user or not verify_password(body.password, user["hashed_password"]):
