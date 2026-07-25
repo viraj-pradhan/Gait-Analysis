@@ -379,40 +379,49 @@ export default function SessionDetailPage() {
               </div>
             )}
 
-            {/* Interactive Live Telemetry Joint Graphs (Knees, Hips, Ankles) */}
-            <div className="bg-[#FFFFFF] p-6 space-y-4 shadow-sm border border-[#E5E5E7] rounded-2xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E5E7] pb-4">
+            {/* 3 SEPARATE LIVE GRAPHS: Knees, Hips, Ankles */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-[#E5E5E7] pb-3">
                 <div>
                   <h3 className="text-sm font-bold text-[#1D1D1F] flex items-center gap-2">
                     <Activity className="w-4 h-4 text-[#0B6E4F]" />
-                    Interactive Live Joint Trajectory Graphs (Knees, Hips, Ankles)
+                    3 Live Telemetry Trajectory Graphs (Knees, Hips, Ankles)
                   </h3>
-                  <p className="text-xs text-[#6E6E73] mt-0.5">Hover on curves to view frame-by-frame joint angle telemetry over time</p>
-                </div>
-
-                <div className="flex items-center gap-1.5 bg-[#FAFAFA] p-1 rounded-xl border border-[#E5E5E7]">
-                  {(['knee', 'hip', 'ankle'] as const).map((j) => (
-                    <button
-                      key={j}
-                      onClick={() => setActiveJoint(j)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-colors ${
-                        activeJoint === j
-                          ? 'bg-[#0B6E4F] text-white shadow-xs'
-                          : 'text-[#6E6E73] hover:text-[#1D1D1F]'
-                      }`}
-                    >
-                      {j} Joint
-                    </button>
-                  ))}
+                  <p className="text-xs text-[#6E6E73] mt-0.5">Interactive frame-by-frame joint angle trajectories (Left vs Right)</p>
                 </div>
               </div>
 
               {csvData.length > 0 ? (
-                <div className="pt-2">
-                  <JointTimeSeriesChart data={csvData} joint={activeJoint} height={320} />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Graph 1: Knee */}
+                  <div className="bg-[#FFFFFF] p-5 rounded-2xl border border-[#E5E5E7] shadow-sm space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#E5E5E7] pb-2.5">
+                      <h4 className="text-xs font-bold text-[#1D1D1F]">1. Knee Joint Flexion Curve</h4>
+                      <span className="text-[10px] font-semibold text-[#0B6E4F] bg-[#E7F5EA] px-2 py-0.5 rounded-md">Left vs Right</span>
+                    </div>
+                    <JointTimeSeriesChart data={csvData} joint="knee" height={260} />
+                  </div>
+
+                  {/* Graph 2: Hip */}
+                  <div className="bg-[#FFFFFF] p-5 rounded-2xl border border-[#E5E5E7] shadow-sm space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#E5E5E7] pb-2.5">
+                      <h4 className="text-xs font-bold text-[#1D1D1F]">2. Hip Joint Flexion Curve</h4>
+                      <span className="text-[10px] font-semibold text-[#0B6E4F] bg-[#E7F5EA] px-2 py-0.5 rounded-md">Left vs Right</span>
+                    </div>
+                    <JointTimeSeriesChart data={csvData} joint="hip" height={260} />
+                  </div>
+
+                  {/* Graph 3: Ankle */}
+                  <div className="bg-[#FFFFFF] p-5 rounded-2xl border border-[#E5E5E7] shadow-sm space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#E5E5E7] pb-2.5">
+                      <h4 className="text-xs font-bold text-[#1D1D1F]">3. Ankle Joint Angle Curve</h4>
+                      <span className="text-[10px] font-semibold text-[#0B6E4F] bg-[#E7F5EA] px-2 py-0.5 rounded-md">Left vs Right</span>
+                    </div>
+                    <JointTimeSeriesChart data={csvData} joint="ankle" height={260} />
+                  </div>
                 </div>
               ) : (
-                <div className="p-8 text-center text-xs text-[#6E6E73] bg-[#FAFAFA] rounded-xl border border-dashed border-[#E5E5E7]">
+                <div className="p-8 text-center text-xs text-[#6E6E73] bg-[#FFFFFF] rounded-2xl border border-dashed border-[#E5E5E7]">
                   Loading live CSV joint telemetry data...
                 </div>
               )}
