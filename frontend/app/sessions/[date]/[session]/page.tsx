@@ -7,6 +7,7 @@ import { JointTimeSeriesChart } from '@/components/charts/JointTimeSeriesChart'
 import { fetchGaitCsv, GaitCsvRow } from '@/lib/csv'
 import { getToken, getSessionDetail, getStaticUrl, updateSessionPatientName } from '@/lib/api'
 import { getConfidenceTier } from '@/lib/badges'
+import { getPatientSlug } from '@/lib/session-utils'
 import { 
   ArrowLeft, 
   Download, 
@@ -187,7 +188,12 @@ export default function SessionDetailPage() {
                   ) : (
                     <div className="flex items-center gap-[8px] min-w-0">
                       <h1 className="text-[18px] font-[600] text-[#1D1D1F] tracking-tight truncate">
-                        {patientDisplayName} — {meta.session_label || `Session ${meta.session_number}`}
+                        <Link 
+                          href={`/patients/${getPatientSlug(meta.patient_name)}`}
+                          className="hover:underline"
+                        >
+                          {patientDisplayName}
+                        </Link> — {meta.session_label || `Session ${meta.session_number}`}
                       </h1>
                       <button
                         onClick={() => {

@@ -108,6 +108,18 @@ export async function updateSessionPatientName(dateStr: string, sessionNum: stri
   })
 }
 
+export async function deleteSession(dateStr: string, sessionNum: string) {
+  return apiJson(`/api/sessions/${dateStr}/${sessionNum}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function deletePatient(patientId: string) {
+  return apiJson(`/api/patients/${patientId}`, {
+    method: 'DELETE',
+  })
+}
+
 export function getStaticUrl(relPath: string) {
   if (!relPath) return ''
   if (relPath.startsWith('http')) return relPath

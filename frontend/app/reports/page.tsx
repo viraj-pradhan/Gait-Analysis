@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { AppShell } from '@/components/AppShell'
 import { getToken, listSessions, getStaticUrl, updateSessionPatientName } from '@/lib/api'
 import { getConfidenceTier } from '@/lib/badges'
+import { getPatientSlug } from '@/lib/session-utils'
 import { 
   FileText, 
   Download, 
@@ -179,9 +180,12 @@ export default function ReportsPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-[12px] min-w-0">
-                            <span className={`text-[14px] font-[600] truncate ${hasRealName ? 'text-[#1D1D1F]' : 'text-[#6E6E73] italic'}`}>
+                            <Link
+                              href={`/patients/${getPatientSlug(r.patient_name)}`}
+                              className={`text-[14px] font-[600] hover:underline truncate ${hasRealName ? 'text-[#1D1D1F]' : 'text-[#6E6E73] italic'}`}
+                            >
                               {patientDisplayName}
-                            </span>
+                            </Link>
                             <button
                               onClick={() => {
                                 setEditingSessionId(r.session_id)

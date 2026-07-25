@@ -20,6 +20,18 @@ export type SessionEntry = {
 
 export { getConfidenceTier, getAsymmetryTier }
 
+export function getPatientSlug(patientName?: string): string {
+  if (!patientName || patientName === 'Unknown Patient') return 'unassigned'
+  return patientName.trim().toLowerCase().replace(/\s+/g, '-')
+}
+
+export function getPatientInitials(patientName?: string): string {
+  if (!patientName || patientName === 'Unknown Patient' || patientName === 'Unassigned') return 'UA'
+  const parts = patientName.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 export function getConfidenceBadge(confFrac: number) {
   const tier = getConfidenceTier(confFrac)
   return { 

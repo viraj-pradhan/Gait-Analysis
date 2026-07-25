@@ -2,7 +2,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Activity, FileText, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, Activity, Users, FileText, Settings, LogOut } from 'lucide-react'
 
 type NavItem = {
   label: string
@@ -17,7 +17,13 @@ const navItems: NavItem[] = [
     label: 'Sessions',
     href: '/sessions',
     icon: Activity,
-    match: (p) => p === '/sessions' || p.startsWith('/sessions/'),
+    match: (p) => p === '/sessions',
+  },
+  {
+    label: 'Patients',
+    href: '/patients',
+    icon: Users,
+    match: (p) => p === '/patients' || p.startsWith('/patients/'),
   },
   { label: 'Reports', href: '/reports', icon: FileText },
   { label: 'Settings', href: '/settings', icon: Settings },

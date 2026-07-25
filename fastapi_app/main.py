@@ -175,6 +175,95 @@ async def update_session_patient_name(
     return {"status": "success", "meta": meta}
 
 
+@app.delete("/api/sessions/{date_str}/{session_num}")
+async def delete_session(date_str: str, session_num: str):
+    """Permanently delete a session directory, its files, index record, and DB job entry."""
+    import shutil
+    session_dir = SESSIONS_DIR / date_str / session_num
+    session_id = f"{date_str}/{session_num}"
+
+    # Delete physical directory
+    if session_dir.exists():
+        try:
+            shutil.rmtree(session_dir)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to delete directory: {e}")
+
+    # Remove from index.json
+    index_file = SESSIONS_DIR / "index.json"
+    if index_file.exists():
+        try:
+            with open(index_file, "r", encoding="utf-8") as f:
+                index = json.load(f)
+
+            new_index = [entry for entry in index if entry.get("session_id") != session_id]
+
+            with open(index_file, "w", encoding="utf-8") as f:
+                json.dump(new_index, f, indent=2)
+        except Exception as e:
+            print(f"⚠ Warning: Failed to update index.json on session delete: {e}")
+
+    # Remove from MongoDB jobs
+    try:
+        await jobs_col().delete_many({"session_id": session_id})
+    except Exception:
+        pass
+
+    # Cleanup empty date dir if no sessions left
+    date_dir = SESSIONS_DIR / date_str
+    if date_dir.exists() and not any(date_dir.iterdir()):
+        try:
+            date_dir.rmdir()
+        except Exception:
+            pass
+
+    return {"status": "success", "message": f"Session {session_id} deleted successfully"}
+
+
+@app.delete("/api/patients/{patient_id}")
+async def delete_patient(patient_id: str):
+    """Permanently delete all sessions associated with a patient."""
+    import shutil
+    index_file = SESSIONS_DIR / "index.json"
+    if not index_file.exists():
+        return {"status": "success", "deleted_count": 0}
+
+    with open(index_file, "r", encoding="utf-8") as f:
+        index = json.load(f)
+
+    # Match patient by slugified name or exact patient_name
+    def is_match(entry):
+        p_name = entry.get("patient_name") or "Unassigned"
+        p_slug = p_name.lower().replace(" ", "-")
+        return p_slug == patient_id.lower() or p_name.lower() == patient_id.lower()
+
+    to_delete = [entry for entry in index if is_match(entry)]
+    remaining = [entry for entry in index if not is_match(entry)]
+
+    deleted_count = 0
+    for entry in to_delete:
+        session_id = entry.get("session_id")
+        if session_id:
+            date_part, session_part = session_id.split("/")
+            s_dir = SESSIONS_DIR / date_part / session_part
+            if s_dir.exists():
+                try:
+                    shutil.rmtree(s_dir)
+                except Exception:
+                    pass
+            try:
+                await jobs_col().delete_many({"session_id": session_id})
+            except Exception:
+                pass
+            deleted_count += 1
+
+    with open(index_file, "w", encoding="utf-8") as f:
+        json.dump(remaining, f, indent=2)
+
+    return {"status": "success", "deleted_count": deleted_count}
+
+
 @app.get("/")
 def root():
     return {"message": "AquaGait API is running"}
+
