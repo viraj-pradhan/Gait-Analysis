@@ -1,11 +1,12 @@
 """
 fastapi_app/auth.py
 Password hashing and JWT creation / verification utilities.
+Uses PyJWT (import jwt) and bcrypt for password hashing.
 """
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from jose import JWTError, jwt
+import jwt
 import bcrypt
 
 from .config import settings
@@ -31,5 +32,5 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def decode_token(token: str) -> dict:
-    """Raises JWTError if token is invalid or expired."""
+    """Raises jwt.PyJWTError if token is invalid or expired."""
     return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
