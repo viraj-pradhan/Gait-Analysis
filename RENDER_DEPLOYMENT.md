@@ -1,64 +1,44 @@
-# 🚀 Deploying Underwater Gait Analysis to Render.com
+# 🚀 Single-Service Render.com Deployment Guide
 
-This repository is pre-configured for automatic deployment on [Render.com](https://render.com) using the included `render.yaml` Blueprint specification.
+This project is configured as a **Single Unified Web Service** that runs both the **FastAPI Backend** and **Next.js Frontend** together on a single Render service with **one URL** and **zero CORS setup needed**.
 
 ---
 
-## 📋 Quick Step-by-Step Deployment (2 Minutes)
+## ⚡ Quick Deployment Instructions (Single Web Service)
 
-### Step 1: Push Repository to GitHub
-Ensure all code is pushed to your GitHub repository (`https://github.com/viraj-pradhan/Gait-Analysis` or your fork):
+### Step 1: Push Code to GitHub
+Ensure your code is pushed to your GitHub repository ([https://github.com/viraj-pradhan/Gait-Analysis](https://github.com/viraj-pradhan/Gait-Analysis)):
 ```bash
 git add -A
-git commit -m "Configure Render deployment"
+git commit -m "Single-service Render Docker deployment setup"
 git push -u origin main
 ```
 
 ---
 
-### Step 2: Connect to Render.com Blueprint
-1. Log in to [https://dashboard.render.com/](https://dashboard.render.com/).
-2. Click the **New +** button in the top right corner.
-3. Select **Blueprint**.
-4. Connect your GitHub account and choose the repository: **`Gait-Analysis`**.
+### Step 2: Create Service on Render.com
+1. Go to [https://dashboard.render.com/](https://dashboard.render.com/).
+2. Click **New +** -> **Web Service** (or **Blueprint**).
+3. Connect your repository: **`Gait-Analysis`**.
 
 ---
 
-### Step 3: Configure Environment Variables
-Render will automatically detect `render.yaml` and prompt you for required variables:
-- **`MONGODB_URI`**: Paste your MongoDB connection string (e.g., from [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) free tier cluster):
+### Step 3: Deployment Settings (Single Service)
+- **Environment / Runtime**: `Docker` (Render automatically uses the included `Dockerfile`)
+- **Region**: Any (e.g., Singapore or US East)
+- **Instance Type**: `Free`
+
+#### Environment Variables:
+Add the following under **Environment Variables**:
+- **`MONGODB_URI`**: Your MongoDB connection string (e.g. from MongoDB Atlas):
   ```
-  mongodb+srv://<username>:<password>@cluster0.mongodb.net/gait_analysis?retryWrites=true&w=majority
+  mongodb+srv://<user>:<password>@cluster.mongodb.net/gait_analysis?retryWrites=true&w=majority
   ```
+- **`DB_NAME`**: `gait_analysis`
+- **`JWT_SECRET`**: Any secret key string
 
 ---
 
-### Step 4: Click Apply
-Click **Apply Blueprint**. Render will build and deploy both services automatically:
-
-1. **`gait-analysis-backend`** (Python/FastAPI Service):
-   - Handles MediaPipe pose processing, step detection, and REST APIs.
-2. **`gait-analysis-frontend`** (Next.js Node Service):
-   - Modern clinical web dashboard connected automatically to the backend.
-
----
-
-## 🛠️ Manual Deployment Settings (If Not Using Blueprint)
-
-If you prefer deploying services manually on Render:
-
-### Backend Service (Web Service):
-- **Runtime**: `Python 3`
-- **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `uvicorn fastapi_app.main:app --host 0.0.0.0 --port $PORT`
-- **Environment Variables**:
-  - `MONGODB_URI`: `mongodb+srv://...`
-  - `DB_NAME`: `gait_analysis`
-  - `ALLOWED_ORIGINS`: `https://your-frontend.onrender.com`
-
-### Frontend Service (Web Service):
-- **Runtime**: `Node`
-- **Build Command**: `cd frontend && npm install && npm run build`
-- **Start Command**: `cd frontend && npm start`
-- **Environment Variables**:
-  - `NEXT_PUBLIC_API_URL`: `https://your-backend.onrender.com`
+### Step 4: Click Deploy!
+Render will build the Docker container and start your single-service app.
+You will get **ONE single URL** (e.g. `https://gait-analysis.onrender.com`) containing the full application!
