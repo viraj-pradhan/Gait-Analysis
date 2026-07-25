@@ -3,19 +3,17 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/AppShell'
-import { JointTimeSeriesChart } from '@/components/charts/JointTimeSeriesChart'
 import { getToken, listSessions, getStaticUrl, updateSessionPatientName } from '@/lib/api'
-import { fetchGaitCsv, type GaitCsvRow } from '@/lib/csv'
 import { 
   Activity, 
   Clock, 
   Download, 
-  ChevronRight,
-  TrendingUp,
-  User,
-  Search,
-  Pencil,
-  Check,
+  ChevronRight, 
+  TrendingUp, 
+  User, 
+  Search, 
+  Pencil, 
+  Check, 
   X,
   Sparkles
 } from 'lucide-react'
@@ -46,21 +44,6 @@ export default function SessionsDashboardPage() {
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
-
-  // Interactive Live Joint Graph State
-  const [csvData, setCsvData] = useState<GaitCsvRow[]>([])
-  const [activeJoint, setActiveJoint] = useState<'knee' | 'hip' | 'ankle'>('knee')
-
-  useEffect(() => {
-    const valid = sessions.filter(s => s.status === 'success')
-    if (valid.length > 0) {
-      const latest = valid[0]
-      const [dPart, sPart] = latest.session_id.split('/')
-      fetchGaitCsv(getStaticUrl(`/sessions/${dPart}/${sPart}/gait_analysis_data.csv`), 1)
-        .then(setCsvData)
-        .catch(() => {})
-    }
-  }, [sessions])
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('')
@@ -194,49 +177,11 @@ export default function SessionsDashboardPage() {
               <p className="text-2xl font-extrabold text-[#1D1D1F] mt-1">{avgConfidence}%</p>
               <p className="text-[11px] text-[#6E6E73] mt-0.5">Mean landmark visibility confidence</p>
             </div>
+            <div className="w-12 h-12 rounded-xl bg-[#FEF8E7] flex items-center justify-center text-[#9C6B00]">
+              <Clock className="w-6 h-6" />
+            </div>
           </div>
         </div>
-
-        {/* Interactive Live Telemetry Joint Trajectory Graphs (Knee, Hip, Ankle) */}
-        {mounted && (
-          <div className="bg-[#FFFFFF] p-6 rounded-2xl border border-[#E5E5E7] shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E5E5E7] pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-[#1D1D1F] flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-[#0B6E4F]" />
-                  Live Joint Angle Trajectory Graphs (Knee, Hip, Ankle)
-                </h3>
-                <p className="text-xs text-[#6E6E73] mt-0.5">Interactive frame-by-frame joint angle curves (Left vs Right)</p>
-              </div>
-
-              <div className="flex items-center gap-1.5 bg-[#FAFAFA] p-1 rounded-xl border border-[#E5E5E7]">
-                {(['knee', 'hip', 'ankle'] as const).map((j) => (
-                  <button
-                    key={j}
-                    onClick={() => setActiveJoint(j)}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-colors ${
-                      activeJoint === j
-                        ? 'bg-[#0B6E4F] text-white shadow-xs'
-                        : 'text-[#6E6E73] hover:text-[#1D1D1F]'
-                    }`}
-                  >
-                    {j} Joint
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {csvData.length > 0 ? (
-              <div className="w-full pt-2">
-                <JointTimeSeriesChart data={csvData} joint={activeJoint} height={300} />
-              </div>
-            ) : (
-              <div className="p-8 text-center text-xs text-[#6E6E73] bg-[#FAFAFA] rounded-xl border border-dashed border-[#E5E5E7]">
-                Loading live joint trajectory telemetry...
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Recharts Recovery Trend Line Chart */}
         {mounted && chartData.length > 0 && (
@@ -273,174 +218,154 @@ export default function SessionsDashboardPage() {
           {/* Header & Controls Toolbar */}
           <div className="p-5 border-b border-[#E5E5E7] bg-[#FAFAFA] flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h3 className="text-sm font-bold text-[#1D1D1F]">Patient Session Registry</h3>
-              <p className="text-xs text-[#6E6E73] mt-0.5">Click any row to inspect per-joint ROMs, asymmetry, and plots</p>
+              <h3 className="text-sm font-bold text-[#1D1D1F]">All Recorded Evaluations</h3>
+              <p className="text-xs text-[#6E6E73] mt-0.5">Filter by patient name, video filename, or pose quality</p>
             </div>
 
-            {/* Search Input & Filter Pills */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative min-w-[220px]">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Search input */}
+              <div className="relative">
                 <Search className="w-3.5 h-3.5 text-[#6E6E73] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search patient, date..."
+                  placeholder="Search patient or file..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="input-form text-xs pl-8 py-1.5 rounded-lg border-[#E5E5E7] bg-[#FFFFFF]"
+                  className="input-form pl-8 text-xs py-1.5 h-9 w-full sm:w-56 rounded-xl"
                 />
               </div>
 
-              <div className="flex items-center gap-1 bg-[#FFFFFF] border border-[#E5E5E7] p-1 rounded-lg">
-                <button
-                  onClick={() => setFilterQuality('all')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${filterQuality === 'all' ? 'bg-[#0B6E4F] text-white' : 'text-[#6E6E73] hover:text-[#1D1D1F]'}`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => setFilterQuality('good')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${filterQuality === 'good' ? 'bg-[#1E7B34] text-white' : 'text-[#6E6E73] hover:text-[#1D1D1F]'}`}
-                >
-                  Good
-                </button>
-                <button
-                  onClick={() => setFilterQuality('mild')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${filterQuality === 'mild' ? 'bg-[#9C6B00] text-white' : 'text-[#6E6E73] hover:text-[#1D1D1F]'}`}
-                >
-                  Mild
-                </button>
+              {/* Quality Filter Pills */}
+              <div className="flex items-center gap-1 bg-[#FFFFFF] p-1 rounded-xl border border-[#E5E5E7]">
+                {(['all', 'good', 'mild', 'low'] as const).map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => setFilterQuality(q)}
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg capitalize transition-colors ${
+                      filterQuality === q 
+                        ? 'bg-[#0B6E4F] text-white shadow-xs' 
+                        : 'text-[#6E6E73] hover:text-[#1D1D1F]'
+                    }`}
+                  >
+                    {q}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
+          {/* Table list */}
           {loading ? (
             <div className="p-12 text-center text-xs text-[#6E6E73]">Loading sessions registry…</div>
           ) : filteredSessions.length === 0 ? (
-            <div className="p-12 text-center">
-              <Activity className="w-8 h-8 text-[#6E6E73] mx-auto mb-2 opacity-50" />
-              <p className="text-xs font-semibold text-[#1D1D1F]">No matching session records</p>
-              <p className="text-[11px] text-[#6E6E73] mt-1">Try clearing your search filter or use "+ New Session" to upload a recording</p>
+            <div className="p-12 text-center text-xs text-[#6E6E73]">
+              No sessions match your search filter criteria.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-[#E5E5E7] bg-[#FAFAFA] text-[#6E6E73] font-semibold">
-                    <th className="py-3.5 px-5">Patient Name</th>
-                    <th className="py-3.5 px-4">Recorded Date & Time</th>
-                    <th className="py-3.5 px-4">Video Filename</th>
-                    <th className="py-3.5 px-4">Duration</th>
-                    <th className="py-3.5 px-4">Cadence</th>
-                    <th className="py-3.5 px-4">Tracking Quality</th>
-                    <th className="py-3.5 px-5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E5E5E7]">
-                  {filteredSessions.map((s) => {
-                    const confBadge = getConfidenceBadge(s.mean_confidence || 0)
-                    const parts = s.session_id.split('/')
-                    const datePart = parts[0]
-                    const sessionPart = parts[1]
-                    const isEditing = editingSessionId === s.session_id
+            <div className="divide-y divide-[#E5E5E7]">
+              {filteredSessions.map((s) => {
+                const confBadge = getConfidenceBadge(s.mean_confidence || 0)
+                const [datePart, sessionPart] = s.session_id.split('/')
+                const isEditing = editingSessionId === s.session_id
 
-                    return (
-                      <tr 
-                        key={s.session_id} 
-                        className="table-row-hover transition-colors cursor-pointer hover:bg-[#FAFAFA]"
-                        onClick={() => router.push(`/sessions/${datePart}/${sessionPart}`)}
-                      >
-                        <td className="py-4 px-5 font-bold text-[#1D1D1F]" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center gap-2.5">
-                            {/* Lucide User Icon Badge (No broken glyph box!) */}
-                            <div className="w-8 h-8 rounded-full bg-[#E7F5EA] border border-[#0B6E4F]/20 flex items-center justify-center text-[#0B6E4F] shrink-0 shadow-xs">
-                              <User className="w-4 h-4" />
+                return (
+                  <div
+                    key={s.session_id}
+                    className="p-4 hover:bg-[#FAFAFA] transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 group"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      {/* SVG User Badge */}
+                      <div className="w-10 h-10 rounded-full bg-[#E7F5EA] border border-[#0B6E4F]/20 flex items-center justify-center text-[#0B6E4F] font-bold text-sm shrink-0 shadow-xs">
+                        <User className="w-5 h-5" />
+                      </div>
+
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          {isEditing ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={editNameValue}
+                                onChange={(e) => setEditNameValue(e.target.value)}
+                                className="input-form text-xs py-1 px-2.5 h-7 rounded-lg border-[#0B6E4F]"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handleSavePatientName(s.session_id)}
+                                disabled={savingName}
+                                className="p-1 rounded-lg bg-[#0B6E4F] text-white hover:bg-[#08553d]"
+                                title="Save"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setEditingSessionId(null)}
+                                className="p-1 rounded-lg bg-[#E5E5E7] text-[#1D1D1F] hover:bg-[#d0d0d2]"
+                                title="Cancel"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-
-                            {isEditing ? (
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  value={editNameValue}
-                                  onChange={(e) => setEditNameValue(e.target.value)}
-                                  className="input-form text-xs py-1 px-2 h-7 rounded-md border-[#0B6E4F]"
-                                  autoFocus
-                                />
-                                <button
-                                  onClick={() => handleSavePatientName(s.session_id)}
-                                  disabled={savingName}
-                                  className="p-1 rounded bg-[#0B6E4F] text-white hover:bg-[#08553d]"
-                                  title="Save"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => setEditingSessionId(null)}
-                                  className="p-1 rounded bg-[#E5E5E7] text-[#1D1D1F] hover:bg-[#d0d0d2]"
-                                  title="Cancel"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="group flex items-center gap-1.5">
-                                <div>
-                                  <p className="text-xs font-bold text-[#1D1D1F]">{s.patient_name || 'Unknown Patient'}</p>
-                                  <p className="text-[10px] text-[#6E6E73] font-normal">{s.session_label}</p>
-                                </div>
-                                <button
-                                  onClick={() => {
-                                    setEditingSessionId(s.session_id)
-                                    setEditNameValue(s.patient_name || 'Unknown Patient')
-                                  }}
-                                  className="text-[#6E6E73] hover:text-[#0B6E4F] p-0.5 rounded opacity-70 hover:opacity-100 transition-opacity"
-                                  title="Edit misspelled patient name"
-                                >
-                                  <Pencil className="w-3 h-3" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-4 px-4 text-[#6E6E73] font-medium">
-                          {s.recorded_date || s.date} {s.recorded_time ? `at ${s.recorded_time}` : ''}
-                        </td>
-                        <td className="py-4 px-4 text-[#6E6E73] truncate max-w-[160px]" title={s.video_filename}>
-                          {s.video_filename}
-                        </td>
-                        <td className="py-4 px-4 font-semibold text-[#1D1D1F]">{s.duration_sec}s</td>
-                        <td className="py-4 px-4 font-bold text-[#0B6E4F]">
-                          {s.cadence_spm} spm
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className={`badge-soft ${confBadge.class}`}>
-                            {confBadge.label}
-                          </span>
-                        </td>
-                        <td className="py-4 px-5 text-right space-x-2" onClick={e => e.stopPropagation()}>
-                          {s.report_docx && (
-                            <a
-                              href={getStaticUrl(s.report_docx)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="btn-outline py-1.5 px-3 text-[11px] rounded-lg"
-                            >
-                              <Download className="w-3.5 h-3.5 text-[#6E6E73]" />
-                              <span>DOCX</span>
-                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-bold text-[#1D1D1F] truncate">
+                                {s.patient_name || 'Patient'} — {s.session_label || `Session ${s.session_number}`}
+                              </h4>
+                              <button
+                                onClick={() => {
+                                  setEditingSessionId(s.session_id)
+                                  setEditNameValue(s.patient_name || 'Patient')
+                                }}
+                                className="text-[#6E6E73] hover:text-[#0B6E4F] p-0.5 rounded transition-colors"
+                                title="Edit misspelled patient name"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           )}
-                          <Link
-                            href={`/sessions/${datePart}/${sessionPart}`}
-                            className="btn-accent py-1.5 px-3 text-[11px] rounded-lg"
-                          >
-                            <span>Inspect</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </Link>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                        </div>
+
+                        <p className="text-xs text-[#6E6E73] flex flex-wrap items-center gap-2">
+                          <span>Recorded: <strong className="text-[#1D1D1F]">{s.recorded_date || s.date}</strong> {s.recorded_time ? `at ${s.recorded_time}` : ''}</span>
+                          <span>·</span>
+                          <span>File: <strong className="text-[#1D1D1F]">{s.video_filename}</strong></span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 shrink-0 justify-between md:justify-end">
+                      <div className="text-right hidden sm:block">
+                        <p className="text-xs font-bold text-[#0B6E4F]">{s.cadence_spm || 0} spm</p>
+                        <p className="text-[10px] text-[#6E6E73]">{s.duration_sec || 0}s duration</p>
+                      </div>
+
+                      <span className={`badge-soft ${confBadge.class}`}>
+                        {confBadge.label}
+                      </span>
+
+                      {s.report_docx && (
+                        <a
+                          href={getStaticUrl(s.report_docx)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 rounded-xl text-[#6E6E73] hover:text-[#0B6E4F] hover:bg-[#E7F5EA] transition-colors"
+                          title="Download Word Report (.docx)"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                      )}
+
+                      <Link
+                        href={`/sessions/${datePart}/${sessionPart}`}
+                        className="btn-outline text-xs py-1.5 px-3 rounded-xl group-hover:border-[#0B6E4F] group-hover:text-[#0B6E4F] transition-all flex items-center gap-1"
+                      >
+                        <span>View Details</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

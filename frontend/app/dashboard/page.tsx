@@ -5,21 +5,15 @@ import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/AppShell'
 import { StatCard } from '@/components/ui/StatCard'
 import { RecoveryTrendChart } from '@/components/charts/RecoveryTrendChart'
-import { JointTimeSeriesChart } from '@/components/charts/JointTimeSeriesChart'
-import { getToken, listSessions, getStaticUrl } from '@/lib/api'
-import { fetchGaitCsv, type GaitCsvRow } from '@/lib/csv'
+import { getToken, listSessions } from '@/lib/api'
 import { buildTrendChartData, getConfidenceBadge, type SessionEntry } from '@/lib/session-utils'
-import { Activity, TrendingUp, ShieldCheck, ChevronRight, Users, User, BarChart3 } from 'lucide-react'
+import { Activity, TrendingUp, ShieldCheck, ChevronRight, Users, User } from 'lucide-react'
 
 export default function DashboardOverviewPage() {
   const router = useRouter()
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [mounted, setMounted] = useState(false)
-
-  // Interactive Live Joint Graph State
-  const [csvData, setCsvData] = useState<GaitCsvRow[]>([])
-  const [activeJoint, setActiveJoint] = useState<'knee' | 'hip' | 'ankle'>('knee')
 
   useEffect(() => {
     setMounted(true)
@@ -28,17 +22,7 @@ export default function DashboardOverviewPage() {
       return
     }
     listSessions()
-      .then((data) => {
-        setSessions(data)
-        const valid = data.filter((s: any) => s.status === 'success')
-        if (valid.length > 0) {
-          const latest = valid[0]
-          const [dPart, sPart] = latest.session_id.split('/')
-          fetchGaitCsv(getStaticUrl(`/sessions/${dPart}/${sPart}/gait_analysis_data.csv`), 1)
-            .then(setCsvData)
-            .catch(() => {})
-        }
-      })
+      .then(setSessions)
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [router])
@@ -79,43 +63,6 @@ export default function DashboardOverviewPage() {
             accent="green"
           />
           <StatCard label="Tracking Quality" value={`${avgConfidence}%`} sub="Mean pose confidence" icon={ShieldCheck} accent="amber" />
-        </div>
-
-        {/* Interactive Live Joint Graphs (Knee, Hip, Ankle) */}
-        <div className="section-card section-card-padded space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E2E8F0] pb-3">
-            <div>
-              <h3 className="section-card-title flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-[#0B6E4F]" />
-                Live Joint Angle Trajectory Graphs (Knee, Hip, Ankle)
-              </h3>
-              <p className="section-card-desc">Interactive frame-by-frame joint angle curves (Left vs Right)</p>
-            </div>
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-              {(['knee', 'hip', 'ankle'] as const).map((j) => (
-                <button
-                  key={j}
-                  onClick={() => setActiveJoint(j)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-colors ${
-                    activeJoint === j
-                      ? 'bg-[#0B6E4F] text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {j} Joint
-                </button>
-              ))}
-            </div>
-          </div>
-          {mounted && csvData.length > 0 ? (
-            <div className="w-full pt-2">
-              <JointTimeSeriesChart data={csvData} joint={activeJoint} height={300} />
-            </div>
-          ) : (
-            <div className="p-8 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-              Loading live joint trajectory graphs...
-            </div>
-          )}
         </div>
 
         {/* Recovery Trend Dual-Axis Line Chart */}
