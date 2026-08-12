@@ -27,7 +27,11 @@ fi
 # Start FastAPI backend — log output so crashes are visible
 echo ""
 echo "⚡ Starting FastAPI backend on 127.0.0.1:8000..."
-uvicorn fastapi_app.main:app --host 127.0.0.1 --port 8000 2>&1 &
+uvicorn fastapi_app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 2 \
+    --timeout-keep-alive 120 2>&1 &
 FASTAPI_PID=$!
 
 # Wait for FastAPI to become ready (up to 15 seconds)
