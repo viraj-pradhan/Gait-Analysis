@@ -16,7 +16,7 @@ from ..config import settings
 from ..database import jobs_table
 from ..deps import get_current_user
 from ..models import JobOut
-from ..background import run_analysis_job, get_progress
+from ..background import run_analysis_job, get_progress, get_status
 
 router = APIRouter()
 
@@ -152,12 +152,22 @@ async def get_job_progress(job_id: str, current_user: dict = Depends(get_current
     if progress == 0 and doc:
         # Fall back to Supabase stored progress
         progress = doc.get("progress", 0)
-    
+
+    # In-memory status is most reliable on localhost (no Supabase)
+    in_mem_status = get_status(job_id)
+    # If Supabase has data, prefer it; otherwise use in-memory
+    final_status = (doc.get("status") if doc else None) or in_mem_status
+
+    # In-memory session_id (stored by background.py on completion)
+    from ..background import _status as _bg_status
+    in_mem_session_id = _bg_status.get(f"{job_id}_session_id")
+    final_session_id = (doc.get("session_id") if doc else None) or in_mem_session_id
+
     return JSONResponse({
         "job_id": job_id,
-        "status": doc.get("status", "queued") if doc else "queued",
+        "status": final_status,
         "progress": progress,
-        "session_id": doc.get("session_id") if doc else None,
+        "session_id": final_session_id,
     })
 
 

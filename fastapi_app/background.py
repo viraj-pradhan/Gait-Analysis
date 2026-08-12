@@ -26,10 +26,18 @@ from .database import jobs_table
 # In-memory progress store (job_id -> percent)
 _progress: dict[str, int] = {}
 
+# In-memory status store (job_id -> status string)
+_status: dict[str, str] = {}
+
 
 def get_progress(job_id: str) -> int:
     """Return current progress percent for a job."""
     return _progress.get(job_id, 0)
+
+
+def get_status(job_id: str) -> str:
+    """Return current status string for a job."""
+    return _status.get(job_id, "queued")
 
 
 async def run_analysis_job(
@@ -47,6 +55,7 @@ async def run_analysis_job(
     """
     try:
         # Mark as processing
+        _status[job_id] = "processing"
         try:
             jobs_table().update({
                 "status": "processing",
@@ -74,18 +83,23 @@ async def run_analysis_job(
             return process_single_video(
                 video_path,
                 patient_name=patient_name,
-                recorded_date=recorded_date,
-                recorded_time=recorded_time,
+                date_str=recorded_date,       # was: recorded_date= (wrong kwarg)
+                time_str=recorded_time,       # was: recorded_time= (wrong kwarg)
                 user_email=user_email,
                 progress_callback=lambda pct: _progress.__setitem__(job_id, pct),
             )
 
         result = await loop.run_in_executor(None, _run)
         _progress[job_id] = 100
+        _status[job_id] = "completed"
 
-        # Determine output paths
-        session_dir = result.get("session_dir", "")
+        # Determine output paths — process_single_video returns meta_entry dict
+        # keys: session_id, session_path, report_docx, status, ...
+        session_dir = result.get("session_path", "")
         session_id = result.get("session_id", "")
+
+        # Store session_id in memory for the progress endpoint
+        _status[f"{job_id}_session_id"] = session_id
 
         try:
             jobs_table().update({
@@ -93,11 +107,12 @@ async def run_analysis_job(
                 "completed_at": datetime.now(timezone.utc).isoformat(),
                 "session_id": session_id,
                 "session_dir": session_dir,
+                "patient_name": result.get("patient_name", ""),
                 "result": {
-                    "video": result.get("video_path", ""),
-                    "xlsx": result.get("xlsx_path", ""),
-                    "docx": result.get("docx_path", ""),
                     "session_id": session_id,
+                    "session_path": session_dir,
+                    "report_docx": result.get("report_docx", ""),
+                    "analysis_status": result.get("status", ""),
                 },
             }).eq("job_id", job_id).execute()
         except Exception as dbe:
@@ -106,6 +121,7 @@ async def run_analysis_job(
     except Exception as e:
         traceback.print_exc()
         _progress[job_id] = -1
+        _status[job_id] = "error"
         try:
             jobs_table().update({
                 "status": "failed",

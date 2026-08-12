@@ -82,13 +82,25 @@ export function AppShell({ children }: AppShellProps) {
           try {
             const prog = await getJobProgress(res.job_id)
             setUploadProgress(prog.progress || 0)
-            if (prog.status === 'success' || prog.status === 'done' || prog.progress >= 100) {
+            const isDone = ['success', 'done', 'completed'].includes(prog.status) || prog.progress >= 100
+            const isError = prog.status === 'error' || prog.status === 'failed'
+            if (isDone) {
               if (pollRef.current) clearInterval(pollRef.current)
               setUploadModalOpen(false)
               setUploading(false)
               setUploadProgress(0)
-              router.push('/sessions')
-            } else if (prog.status === 'error') {
+              // Navigate to specific session if we have the session_id, else session list
+              if (prog.session_id) {
+                const parts = prog.session_id.split('/')
+                if (parts.length === 2) {
+                  router.push(`/sessions/${parts[0]}/${parts[1]}`)
+                } else {
+                  router.push('/sessions')
+                }
+              } else {
+                router.push('/sessions')
+              }
+            } else if (isError) {
               if (pollRef.current) clearInterval(pollRef.current)
               setUploadError('Analysis failed. Please try again.')
               setUploading(false)
