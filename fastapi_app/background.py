@@ -1,7 +1,7 @@
 """
 fastapi_app/background.py
-Background analysis worker: triggers run_session pipeline and updates MongoDB job state.
-Includes real-time progress updates via MongoDB for frontend polling.
+Background analysis worker: triggers run_session pipeline and updates Supabase job state.
+Includes real-time progress updates via Supabase for frontend polling.
 
 IMPORTANT: Heavy imports (run_session, mediapipe, cv2) are deferred to job
 execution time so FastAPI can start even if those packages are missing.
@@ -16,7 +16,7 @@ import sys
 # Insert project root into sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from .database import jobs_col
+from .database import jobs_table
 
 # NOTE: Do NOT import run_session at top level.
 # It pulls in mediapipe/cv2/scipy which may not be available on all containers.
@@ -35,22 +35,25 @@ def get_progress(job_id: str) -> int:
 async def run_analysis_job(
     job_id: str, 
     video_path: str, 
+    output_dir: str = None,
     patient_name: str = None,
     recorded_date: str = None,
+    recorded_time: str = None,
+    user_email: str = None,
 ):
     """
     Run the full gait analysis pipeline as an async background task.
-    Updates MongoDB with status and progress.
+    Updates Supabase with status and progress.
     """
     try:
         # Mark as processing
         try:
-            await jobs_col().update_one(
-                {"_id": job_id},
-                {"$set": {"status": "processing", "started_at": datetime.now(timezone.utc).isoformat()}},
-            )
+            jobs_table().update({
+                "status": "processing",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("job_id", job_id).execute()
         except Exception as dbe:
-            print(f"⚠ MongoDB update_one skipped: {dbe}")
+            print(f"⚠ Supabase update skipped: {dbe}")
 
         _progress[job_id] = 5
 
@@ -72,6 +75,8 @@ async def run_analysis_job(
                 video_path,
                 patient_name=patient_name,
                 recorded_date=recorded_date,
+                recorded_time=recorded_time,
+                user_email=user_email,
                 progress_callback=lambda pct: _progress.__setitem__(job_id, pct),
             )
 
@@ -83,35 +88,29 @@ async def run_analysis_job(
         session_id = result.get("session_id", "")
 
         try:
-            await jobs_col().update_one(
-                {"_id": job_id},
-                {"$set": {
-                    "status": "completed",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
+            jobs_table().update({
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "session_id": session_id,
+                "session_dir": session_dir,
+                "result": {
+                    "video": result.get("video_path", ""),
+                    "xlsx": result.get("xlsx_path", ""),
+                    "docx": result.get("docx_path", ""),
                     "session_id": session_id,
-                    "session_dir": session_dir,
-                    "result": {
-                        "video": result.get("video_path", ""),
-                        "xlsx": result.get("xlsx_path", ""),
-                        "docx": result.get("docx_path", ""),
-                        "session_id": session_id,
-                    },
-                }},
-            )
+                },
+            }).eq("job_id", job_id).execute()
         except Exception as dbe:
-            print(f"⚠ MongoDB update_one skipped: {dbe}")
+            print(f"⚠ Supabase update skipped: {dbe}")
 
     except Exception as e:
         traceback.print_exc()
         _progress[job_id] = -1
         try:
-            await col.update_one(
-                {"_id": job_id},
-                {"$set": {
-                    "status": "failed",
-                    "error": str(e),
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                }},
-            )
+            jobs_table().update({
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("job_id", job_id).execute()
         except Exception:
             pass

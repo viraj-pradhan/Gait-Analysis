@@ -7,6 +7,7 @@ import { RecoveryTrendChart } from '@/components/charts/RecoveryTrendChart'
 import { getToken, listSessions, updateSessionPatientName, deleteSession, deletePatient } from '@/lib/api'
 import { getPatientSlug, getPatientInitials, buildTrendChartData, type SessionEntry } from '@/lib/session-utils'
 import { getConfidenceTier, getAsymmetryTier } from '@/lib/badges'
+import { DeleteConfirmModal } from '@/components/DeleteConfirmModal'
 import { 
   ArrowLeft, 
   User, 
@@ -19,7 +20,6 @@ import {
   TrendingDown,
   TrendingUp,
   Minus,
-  AlertTriangle
 } from 'lucide-react'
 
 export default function PatientProfilePage() {
@@ -260,6 +260,7 @@ export default function PatientProfilePage() {
             {/* Right: Actions Row (Add Session & Delete Patient) */}
             <div className="flex items-center gap-[12px] shrink-0">
               <button
+                type="button"
                 onClick={() => setDeleteModalState({ type: 'patient' })}
                 className="text-[13px] font-[500] text-[#B3261E] hover:underline px-2 py-1 cursor-pointer"
               >
@@ -267,6 +268,7 @@ export default function PatientProfilePage() {
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   window.dispatchEvent(
                     new CustomEvent('open-new-session-modal', {
@@ -385,22 +387,20 @@ export default function PatientProfilePage() {
                         {tier.fullLabel}
                       </span>
 
-                      {/* Trash Delete Icon (16px icon, 28px tap target) */}
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          e.preventDefault()
+                        onClick={() => {
                           setDeleteModalState({ 
                             type: 'session', 
                             sessionId: s.session_id, 
                             sessionLabel: titleText 
                           })
                         }}
-                        className="w-[28px] h-[28px] rounded-[4px] flex items-center justify-center text-[#6E6E73] hover:text-[#B3261E] hover:bg-[#FCEAE9] transition-colors cursor-pointer"
+                        className="icon-action-btn icon-action-btn-danger"
                         title="Delete this session"
+                        aria-label="Delete this session"
                       >
-                        <Trash2 className="w-[16px] h-[16px]" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
 
                       <Link href={`/sessions/${datePart}/${sessionPart}`}>
@@ -414,43 +414,18 @@ export default function PatientProfilePage() {
           )}
         </div>
 
-        {/* Custom Confirmation Deletion Modal (360px Wide) */}
-        {deleteModalState && (
-          <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] w-full max-w-[360px] p-[24px] shadow-xl space-y-4">
-              <div className="flex items-center gap-2 text-[#B3261E]">
-                <AlertTriangle className="w-5 h-5" />
-                <h3 className="text-[16px] font-[600] text-[#1D1D1F]">
-                  {deleteModalState.type === 'session' ? 'Delete this session?' : 'Delete patient record?'}
-                </h3>
-              </div>
-
-              <p className="text-[13px] font-[400] text-[#6E6E73] leading-relaxed">
-                {deleteModalState.type === 'session'
-                  ? `This permanently deletes ${deleteModalState.sessionLabel || 'the session'}'s video, generated report, and telemetry data. This can't be undone.`
-                  : `This permanently deletes ${primaryPatientName} and all associated session videos, reports, and telemetry data. This can't be undone.`
-                }
-              </p>
-
-              <div className="flex items-center justify-end gap-[8px] pt-2">
-                <button
-                  onClick={() => setDeleteModalState(null)}
-                  disabled={deleting}
-                  className="h-[36px] px-[14px] bg-[#FFFFFF] border border-[#E5E5E7] hover:bg-[#FAFAFA] rounded-[6px] text-[13px] font-[500] text-[#1D1D1F] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmDelete}
-                  disabled={deleting}
-                  className="h-[36px] px-[16px] bg-[#B3261E] hover:opacity-90 rounded-[6px] text-[13px] font-[500] text-white cursor-pointer transition-all"
-                >
-                  {deleting ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <DeleteConfirmModal
+          open={!!deleteModalState}
+          title={deleteModalState?.type === 'session' ? 'Delete this session?' : 'Delete patient record?'}
+          message={
+            deleteModalState?.type === 'session'
+              ? <>This permanently deletes <strong>{deleteModalState.sessionLabel || 'this session'}</strong> — including video, report, and telemetry. This cannot be undone.</>
+              : <>This permanently deletes <strong>{primaryPatientName}</strong> and all associated sessions, videos, reports, and telemetry. This cannot be undone.</>
+          }
+          loading={deleting}
+          onCancel={() => setDeleteModalState(null)}
+          onConfirm={handleConfirmDelete}
+        />
       </div>
     </AppShell>
   )

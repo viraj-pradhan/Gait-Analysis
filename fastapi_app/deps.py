@@ -7,7 +7,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 
 from .auth import decode_token
-from .database import users_col
+from .database import users_table
 
 bearer_scheme = HTTPBearer()
 
@@ -28,10 +28,18 @@ async def get_current_user(
     if not email:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bad token payload")
 
-    # Try MongoDB first, fall back to local users.json
+    # Try Supabase first, fall back to local users.json
     user = None
     try:
-        user = await users_col().find_one({"email": email})
+        result = users_table().select("*").eq("email", email).limit(1).execute()
+        if result.data:
+            row = result.data[0]
+            user = {
+                "id": str(row["id"]),
+                "name": row["name"],
+                "email": row["email"],
+                "hashed_password": row["hashed_password"],
+            }
     except Exception:
         pass
 

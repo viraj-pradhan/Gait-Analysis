@@ -47,7 +47,16 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
     const res = await fetch(`${baseUrl}${path}`, { ...opts, headers })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(data.detail || `HTTP ${res.status}`)
+      const detail = data.detail
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join(', ')
+            : res.status === 401 || res.status === 403
+              ? 'Session expired — please sign in again'
+              : `HTTP ${res.status}`
+      throw new Error(message || `HTTP ${res.status}`)
     }
     return res
   } catch (err: any) {
@@ -60,7 +69,13 @@ async function apiFetch(path: string, opts: RequestInit = {}) {
 
 export async function apiJson(path: string, opts: RequestInit = {}) {
   const res = await apiFetch(path, opts)
-  return res.json()
+  const text = await res.text()
+  if (!text) return { status: 'success' }
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { status: 'success', raw: text }
+  }
 }
 
 export async function login(email: string, password: string) {
@@ -119,13 +134,16 @@ export async function updateSessionPatientName(dateStr: string, sessionNum: stri
 }
 
 export async function deleteSession(dateStr: string, sessionNum: string) {
-  return apiJson(`/api/sessions/${dateStr}/${sessionNum}`, {
+  const date = encodeURIComponent(dateStr.trim())
+  const session = encodeURIComponent(sessionNum.trim())
+  return apiJson(`/api/sessions/${date}/${session}`, {
     method: 'DELETE',
   })
 }
 
 export async function deletePatient(patientId: string) {
-  return apiJson(`/api/patients/${patientId}`, {
+  const id = encodeURIComponent(patientId.trim())
+  return apiJson(`/api/patients/${id}`, {
     method: 'DELETE',
   })
 }

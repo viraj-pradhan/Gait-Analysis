@@ -112,6 +112,7 @@ def process_single_video(
     date_str: str = None, 
     patient_name: str = "Unknown Patient",
     time_str: str = None,
+    user_email: str = None,
     progress_callback=None
 ) -> dict:
     """Process a single video into sessions/<date>/session_<N>/ directory."""
@@ -147,6 +148,7 @@ def process_single_video(
             "patient_name": patient_name,
             "recorded_date": date_str,
             "recorded_time": time_str,
+            "user_email": user_email,
             "video_filename": video_path.name,
             "date": date_str,
             "session_number": next_num,
@@ -179,6 +181,7 @@ def process_single_video(
         "patient_name": patient_name,
         "recorded_date": date_str,
         "recorded_time": time_str,
+        "user_email": user_email,
         "video_filename": video_path.name,
         "date": date_str,
         "session_number": next_num,

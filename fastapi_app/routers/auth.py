@@ -1,6 +1,6 @@
 """
 fastapi_app/routers/auth.py
-Register and login endpoints with MongoDB + Local JSON fallback for zero-downtime auth.
+Register and login endpoints with Supabase + Local JSON fallback for zero-downtime auth.
 """
 from fastapi import APIRouter, HTTPException, status
 from datetime import datetime, timezone
@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from ..models import RegisterRequest, LoginRequest, TokenResponse
-from ..database import users_col
+from ..database import users_table
 from ..auth import hash_password, verify_password, create_access_token
 
 router = APIRouter()
@@ -55,34 +55,37 @@ def _save_local_user(email: str, user_dict: dict):
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest):
-    user_doc = None
+    user_id = None
 
-    # Try MongoDB first
+    # Try Supabase first
     try:
-        existing = await users_col().find_one({"email": body.email})
-        if existing:
+        existing = users_table().select("id").eq("email", body.email).limit(1).execute()
+        if existing.data:
             raise HTTPException(status_code=409, detail="Email already registered")
 
-        user_doc = {
+        hashed = hash_password(body.password)
+        result = users_table().insert({
             "name": body.name,
             "email": body.email,
-            "hashed_password": hash_password(body.password),
+            "hashed_password": hashed,
             "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        result = await users_col().insert_one(user_doc)
-        user_id = str(result.inserted_id)
+        }).execute()
+        if result.data:
+            user_id = str(result.data[0]["id"])
     except HTTPException:
         raise
     except Exception as e:
-        print(f"⚠ MongoDB error during register, using local storage: {e}")
+        print(f"⚠ Supabase error during register, using local storage: {e}")
 
     # Save locally as well
     hashed = hash_password(body.password)
     local_users = _get_local_users()
-    if body.email in local_users and not user_doc:
+    if body.email in local_users and not user_id:
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    user_id = user_doc.get("_id") if user_doc else f"user_{int(datetime.now().timestamp())}"
+    if not user_id:
+        user_id = f"user_{int(datetime.now().timestamp())}"
+
     _save_local_user(body.email, {
         "id": str(user_id),
         "name": body.name,
@@ -102,33 +105,38 @@ async def login(body: LoginRequest):
     user_email = body.email.strip().lower()
     user = None
 
-    # 1. Check local users.json first (instant response)
-    local_users = _get_local_users()
-    for email, udata in local_users.items():
-        if email.lower() == user_email:
-            user = udata
-            break
-
-    # 2. Try MongoDB if not found in local users
-    if not user:
-        try:
-            mongo_user = await users_col().find_one({"email": user_email})
-            if mongo_user:
+    # 1. Check Supabase first
+    try:
+        result = users_table().select("*").eq("email", user_email).limit(1).execute()
+        if result.data:
+            row = result.data[0]
+            if verify_password(body.password, row["hashed_password"]):
                 user = {
-                    "id": str(mongo_user["_id"]),
-                    "name": mongo_user.get("name", "Clinician"),
-                    "email": mongo_user["email"],
-                    "hashed_password": mongo_user["hashed_password"],
+                    "id": str(row["id"]),
+                    "name": row.get("name", "Clinician"),
+                    "email": row["email"],
                 }
-        except Exception as e:
-            print(f"⚠ MongoDB connection error during login: {e}")
+    except Exception as e:
+        print(f"⚠ Supabase connection error during login: {e}")
 
-    # 3. If credentials missing or invalid
-    if not user or not verify_password(body.password, user["hashed_password"]):
+    # 2. Check local users.json fallback if Supabase check didn't authenticate
+    if not user:
+        local_users = _get_local_users()
+        for email, udata in local_users.items():
+            if email.lower() == user_email and verify_password(body.password, udata["hashed_password"]):
+                user = {
+                    "id": str(udata.get("id", "user_local")),
+                    "name": udata.get("name", "Clinician"),
+                    "email": udata["email"],
+                }
+                break
+
+    # 3. If credentials missing or invalid in both
+    if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     token = create_access_token({"sub": user["email"]})
     return TokenResponse(
         access_token=token,
-        user={"id": str(user.get("id", "user_1")), "name": user.get("name", "Clinician"), "email": user["email"]},
+        user={"id": str(user["id"]), "name": user["name"], "email": user["email"]},
     )

@@ -8,6 +8,7 @@ import { RecoveryTrendChart } from '@/components/charts/RecoveryTrendChart'
 import { getToken, listSessions, updateSessionPatientName, deleteSession } from '@/lib/api'
 import { buildTrendChartData, getPatientSlug, type SessionEntry } from '@/lib/session-utils'
 import { getConfidenceTier } from '@/lib/badges'
+import { DeleteConfirmModal } from '@/components/DeleteConfirmModal'
 import { 
   Activity, 
   Clock, 
@@ -19,7 +20,6 @@ import {
   Check, 
   X,
   Trash2,
-  AlertTriangle
 } from 'lucide-react'
 
 export default function SessionsDashboardPage() {
@@ -314,21 +314,19 @@ export default function SessionsDashboardPage() {
                         {tier.fullLabel}
                       </span>
 
-                      {/* Trash Delete Icon Button */}
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          e.preventDefault()
+                        onClick={() => {
                           setDeleteModalState({
                             sessionId: s.session_id,
                             sessionLabel: `${patientDisplayName} — Session ${s.session_number} (${s.recorded_date || s.date})`,
                           })
                         }}
-                        className="w-[28px] h-[28px] rounded-[4px] flex items-center justify-center text-[#6E6E73] hover:text-[#B3261E] hover:bg-[#FCEAE9] transition-colors cursor-pointer"
+                        className="icon-action-btn icon-action-btn-danger"
                         title="Delete this session"
+                        aria-label="Delete this session"
                       >
-                        <Trash2 className="w-[16px] h-[16px]" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
 
                       <Link
@@ -346,40 +344,18 @@ export default function SessionsDashboardPage() {
           )}
         </div>
 
-        {/* Custom Confirmation Deletion Modal (360px Wide) */}
-        {deleteModalState && (
-          <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] w-full max-w-[360px] p-[24px] shadow-xl space-y-4 font-sans">
-              <div className="flex items-center gap-2 text-[#B3261E]">
-                <AlertTriangle className="w-5 h-5" />
-                <h3 className="text-[16px] font-[600] text-[#1D1D1F]">Delete this session?</h3>
-              </div>
-
-              <p className="text-[13px] font-[400] text-[#6E6E73] leading-relaxed">
-                This permanently deletes <strong>{deleteModalState.sessionLabel}</strong>'s video, generated report, and telemetry data. This can't be undone.
-              </p>
-
-              <div className="flex items-center justify-end gap-[8px] pt-2">
-                <button
-                  type="button"
-                  onClick={() => setDeleteModalState(null)}
-                  disabled={deleting}
-                  className="h-[36px] px-[14px] bg-[#FFFFFF] border border-[#E5E5E7] hover:bg-[#FAFAFA] rounded-[6px] text-[13px] font-[500] text-[#1D1D1F] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDelete}
-                  disabled={deleting}
-                  className="h-[36px] px-[16px] bg-[#B3261E] hover:opacity-90 rounded-[6px] text-[13px] font-[500] text-white cursor-pointer transition-all"
-                >
-                  {deleting ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <DeleteConfirmModal
+          open={!!deleteModalState}
+          title="Delete this session?"
+          message={
+            <>
+              This permanently deletes <strong>{deleteModalState?.sessionLabel}</strong> — including video, report, and telemetry. This cannot be undone.
+            </>
+          }
+          loading={deleting}
+          onCancel={() => setDeleteModalState(null)}
+          onConfirm={handleConfirmDelete}
+        />
 
       </div>
     </AppShell>

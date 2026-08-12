@@ -6,6 +6,7 @@ import { AppShell } from '@/components/AppShell'
 import { getToken, listSessions, getStaticUrl, updateSessionPatientName, deleteSession } from '@/lib/api'
 import { getConfidenceTier } from '@/lib/badges'
 import { getPatientSlug } from '@/lib/session-utils'
+import { DeleteConfirmModal } from '@/components/DeleteConfirmModal'
 import { 
   FileText, 
   Download, 
@@ -16,7 +17,6 @@ import {
   Check, 
   X,
   Trash2,
-  AlertTriangle
 } from 'lucide-react'
 
 type SessionEntry = {
@@ -267,18 +267,17 @@ export default function ReportsDashboardPage() {
                     </Link>
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
+                      onClick={() => {
                         setDeleteModalState({
                           sessionId: r.session_id,
                           sessionLabel: `${patientDisplayName} — Session ${r.session_number} (${r.recorded_date || r.date})`,
                         })
                       }}
-                      className="w-[36px] h-[36px] rounded-[6px] border border-[#E5E5E7] bg-[#FFFFFF] flex items-center justify-center text-[#6E6E73] hover:text-[#B3261E] hover:bg-[#FCEAE9] hover:border-[#B3261E]/30 transition-colors cursor-pointer shrink-0"
+                      className="icon-action-btn icon-action-btn-danger w-9 h-9 border border-[#E5E5E7] bg-white rounded-md"
                       title="Delete session report"
+                      aria-label="Delete session report"
                     >
-                      <Trash2 className="w-[16px] h-[16px]" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -287,40 +286,18 @@ export default function ReportsDashboardPage() {
           </div>
         )}
 
-        {/* Delete Confirmation Modal */}
-        {deleteModalState && (
-          <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-[#FFFFFF] border border-[#E5E5E7] rounded-[8px] w-full max-w-[360px] p-[24px] shadow-xl space-y-4 font-sans">
-              <div className="flex items-center gap-2 text-[#B3261E]">
-                <AlertTriangle className="w-5 h-5" />
-                <h3 className="text-[16px] font-[600] text-[#1D1D1F]">Delete this session report?</h3>
-              </div>
-
-              <p className="text-[13px] font-[400] text-[#6E6E73] leading-relaxed">
-                This permanently deletes <strong>{deleteModalState.sessionLabel}</strong>'s video, generated report, and telemetry data. This can't be undone.
-              </p>
-
-              <div className="flex items-center justify-end gap-[8px] pt-2">
-                <button
-                  type="button"
-                  onClick={() => setDeleteModalState(null)}
-                  disabled={deleting}
-                  className="h-[36px] px-[14px] bg-[#FFFFFF] border border-[#E5E5E7] hover:bg-[#FAFAFA] rounded-[6px] text-[13px] font-[500] text-[#1D1D1F] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDelete}
-                  disabled={deleting}
-                  className="h-[36px] px-[16px] bg-[#B3261E] hover:opacity-90 rounded-[6px] text-[13px] font-[500] text-white cursor-pointer transition-all"
-                >
-                  {deleting ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <DeleteConfirmModal
+          open={!!deleteModalState}
+          title="Delete this session report?"
+          message={
+            <>
+              This permanently deletes <strong>{deleteModalState?.sessionLabel}</strong> — including video, report, and telemetry. This cannot be undone.
+            </>
+          }
+          loading={deleting}
+          onCancel={() => setDeleteModalState(null)}
+          onConfirm={handleConfirmDelete}
+        />
       </div>
     </AppShell>
   )

@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 import aiofiles
 
 from ..config import settings
-from ..database import jobs_col
+from ..database import jobs_table
 from ..deps import get_current_user
 from ..models import JobOut
 from ..background import run_analysis_job, get_progress
@@ -71,14 +71,11 @@ async def upload_video(
         "video_path": str(video_path),
         "output_dir": str(output_dir),
         "created_at": now,
-        "finished_at": None,
-        "report": None,
-        "error_message": None,
     }
     try:
-        await jobs_col().insert_one(job_doc)
+        jobs_table().insert(job_doc).execute()
     except Exception as dbe:
-        print(f"⚠ MongoDB insert_one skipped (running on local storage): {dbe}")
+        print(f"⚠ Supabase insert skipped (running on local storage): {dbe}")
 
     # Fire-and-forget analysis task
     asyncio.create_task(
@@ -88,7 +85,8 @@ async def upload_video(
             str(output_dir),
             patient_name=patient_name,
             recorded_date=recorded_date,
-            recorded_time=recorded_time
+            recorded_time=recorded_time,
+            user_email=current_user["email"],
         )
     )
 
@@ -104,15 +102,13 @@ async def upload_video(
 async def list_jobs(current_user: dict = Depends(get_current_user)):
     jobs = []
     try:
-        cursor = jobs_col().find(
-            {"user_email": current_user["email"]},
-            sort=[("created_at", -1)],
-            limit=50,
-        )
-        async for doc in cursor:
+        result = jobs_table().select("*").eq(
+            "user_email", current_user["email"]
+        ).order("created_at", desc=True).limit(50).execute()
+        for doc in result.data:
             jobs.append(_doc_to_job(doc))
     except Exception as dbe:
-        print(f"⚠ MongoDB list_jobs skipped: {dbe}")
+        print(f"⚠ Supabase list_jobs skipped: {dbe}")
     return jobs
 
 
@@ -120,11 +116,13 @@ async def list_jobs(current_user: dict = Depends(get_current_user)):
 async def get_job(job_id: str, current_user: dict = Depends(get_current_user)):
     doc = None
     try:
-        doc = await jobs_col().find_one(
-            {"job_id": job_id, "user_email": current_user["email"]}
-        )
+        result = jobs_table().select("*").eq(
+            "job_id", job_id
+        ).eq("user_email", current_user["email"]).limit(1).execute()
+        if result.data:
+            doc = result.data[0]
     except Exception as dbe:
-        print(f"⚠ MongoDB get_job skipped: {dbe}")
+        print(f"⚠ Supabase get_job skipped: {dbe}")
 
     if not doc:
         return JobOut(
@@ -141,23 +139,25 @@ async def get_job_progress(job_id: str, current_user: dict = Depends(get_current
     """Return real-time processing progress for a job."""
     doc = None
     try:
-        doc = await jobs_col().find_one(
-            {"job_id": job_id, "user_email": current_user["email"]}
-        )
+        result = jobs_table().select("*").eq(
+            "job_id", job_id
+        ).eq("user_email", current_user["email"]).limit(1).execute()
+        if result.data:
+            doc = result.data[0]
     except Exception as dbe:
-        print(f"⚠ MongoDB progress lookup skipped: {dbe}")
+        print(f"⚠ Supabase progress lookup skipped: {dbe}")
     
     # In-memory progress is most up-to-date
     progress = get_progress(job_id)
-    if progress == 0:
-        # Fall back to MongoDB stored progress
+    if progress == 0 and doc:
+        # Fall back to Supabase stored progress
         progress = doc.get("progress", 0)
     
     return JSONResponse({
         "job_id": job_id,
-        "status": doc.get("status", "queued"),
+        "status": doc.get("status", "queued") if doc else "queued",
         "progress": progress,
-        "session_id": doc.get("session_id"),
+        "session_id": doc.get("session_id") if doc else None,
     })
 
 
@@ -208,9 +208,12 @@ def _doc_to_job(doc: dict) -> JobOut:
 
 
 async def _get_done_job(job_id: str, user_email: str) -> dict:
-    doc = await jobs_col().find_one({"job_id": job_id, "user_email": user_email})
-    if not doc:
+    result = jobs_table().select("*").eq(
+        "job_id", job_id
+    ).eq("user_email", user_email).limit(1).execute()
+    if not result.data:
         raise HTTPException(status_code=404, detail="Job not found")
+    doc = result.data[0]
     if doc["status"] != "done":
         raise HTTPException(status_code=409, detail=f"Job is not done yet (status: {doc['status']})")
     return doc

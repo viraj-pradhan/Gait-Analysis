@@ -3,10 +3,11 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AppShell } from '@/components/AppShell'
-import { getToken, listSessions } from '@/lib/api'
+import { getToken, listSessions, deletePatient } from '@/lib/api'
 import { getPatientSlug, getPatientInitials, type SessionEntry } from '@/lib/session-utils'
 import { getConfidenceTier } from '@/lib/badges'
-import { Users, Search, ChevronRight, Activity, Calendar } from 'lucide-react'
+import { DeleteConfirmModal } from '@/components/DeleteConfirmModal'
+import { Users, Search, ChevronRight, Calendar, Trash2 } from 'lucide-react'
 
 type PatientSummary = {
   id: string
@@ -23,17 +24,42 @@ export default function PatientsListPage() {
   const [sessions, setSessions] = useState<SessionEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [deleteModalState, setDeleteModalState] = useState<{ id: string; name: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      const data = await listSessions()
+      setSessions(data)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!getToken()) {
       router.replace('/login')
       return
     }
-    listSessions()
-      .then(setSessions)
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    fetchData()
   }, [router])
+
+  async function handleConfirmDelete() {
+    if (!deleteModalState) return
+    setDeleting(true)
+    try {
+      await deletePatient(deleteModalState.id)
+      await fetchData()
+      setDeleteModalState(null)
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete patient record')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   // Aggregate sessions by patient ID / name
   const patientMap = new Map<string, { name: string; sessions: SessionEntry[] }>()
@@ -119,13 +145,12 @@ export default function PatientsListPage() {
               const initials = getPatientInitials(p.name)
 
               return (
-                <Link
+                <div
                   key={p.id}
-                  href={`/patients/${p.id}`}
-                  className="bg-[#FFFFFF] p-[20px] rounded-[8px] border border-[#E5E5E7] hover:border-[#0B6E4F] hover:shadow-xs transition-all flex flex-col justify-between space-y-4 group"
+                  className="bg-[#FFFFFF] p-[20px] rounded-[8px] border border-[#E5E5E7] hover:border-[#0B6E4F] hover:shadow-xs transition-all flex flex-col justify-between space-y-4 group relative"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-[12px] min-w-0">
+                    <Link href={`/patients/${p.id}`} className="flex items-center gap-[12px] min-w-0 flex-1">
                       <div className="w-[40px] h-[40px] rounded-full bg-[#E7F5EA] text-[#0B6E4F] flex items-center justify-center font-[600] text-[14px] shrink-0 border border-[#0B6E4F]/20">
                         {initials}
                       </div>
@@ -137,12 +162,25 @@ export default function PatientsListPage() {
                           {p.sessionCount} {p.sessionCount === 1 ? 'session' : 'sessions'}
                         </p>
                       </div>
-                    </div>
+                    </Link>
 
-                    <ChevronRight className="w-[16px] h-[16px] text-[#6E6E73] group-hover:text-[#0B6E4F] transition-colors shrink-0 mt-1" />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setDeleteModalState({ id: p.id, name: p.name })}
+                        className="icon-action-btn icon-action-btn-danger"
+                        title="Delete patient record"
+                        aria-label={`Delete ${p.name}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <Link href={`/patients/${p.id}`}>
+                        <ChevronRight className="w-[16px] h-[16px] text-[#6E6E73] group-hover:text-[#0B6E4F] transition-colors mt-1" />
+                      </Link>
+                    </div>
                   </div>
 
-                  <div className="pt-[12px] border-t border-[#E5E5E7] flex items-center justify-between text-[12px]">
+                  <Link href={`/patients/${p.id}`} className="pt-[12px] border-t border-[#E5E5E7] flex items-center justify-between text-[12px]">
                     <span className="text-[#6E6E73] flex items-center gap-1">
                       <Calendar className="w-[12px] h-[12px]" /> Last: {p.lastDate}
                     </span>
@@ -153,12 +191,26 @@ export default function PatientsListPage() {
                     >
                       {tier.fullLabel}
                     </span>
-                  </div>
-                </Link>
+                  </Link>
+                </div>
               )
             })}
           </div>
         )}
+
+        <DeleteConfirmModal
+          open={!!deleteModalState}
+          title="Delete patient record?"
+          message={
+            <>
+              This will permanently delete all session recordings, reports, and telemetry for <strong>{deleteModalState?.name}</strong>.
+            </>
+          }
+          confirmLabel="Delete Record"
+          loading={deleting}
+          onCancel={() => setDeleteModalState(null)}
+          onConfirm={handleConfirmDelete}
+        />
       </div>
     </AppShell>
   )

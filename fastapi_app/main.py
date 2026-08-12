@@ -1,38 +1,20 @@
 import os
 import json
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Body
+from urllib.parse import unquote
+from fastapi import FastAPI, HTTPException, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .database import jobs_col
+from .database import jobs_table
+from .deps import get_current_user
 from .routers import auth, jobs
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
 )
-
-# Global Exception Handler to surface full tracebacks and detailed error JSON instead of bare 500
-from fastapi import Request
-from fastapi.responses import JSONResponse
-import traceback
-import logging
-
-logging.basicConfig(level=logging.INFO)
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    print(f"🔥 Unhandled Exception on {request.method} {request.url.path}: {type(exc).__name__} - {exc}")
-    traceback.print_exc()
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": f"Internal Server Error ({type(exc).__name__}): {str(exc)}",
-            "exception": type(exc).__name__,
-        },
-    )
 
 # CORS Configuration
 origins = [
@@ -64,14 +46,21 @@ app.mount("/sessions", StaticFiles(directory=str(SESSIONS_DIR)), name="sessions"
 
 
 @app.get("/api/sessions")
-async def list_sessions():
-    """Read root index.json from sessions directory."""
+async def list_sessions(current_user: dict = Depends(get_current_user)):
+    """Read root index.json from sessions directory filtered by current user."""
     index_file = SESSIONS_DIR / "index.json"
     if not index_file.exists():
         return []
     try:
         with open(index_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+            all_sessions = json.load(f)
+
+        user_email = current_user["email"].lower()
+        # Filter by current user email; legacy sessions belong to default clinician
+        return [
+            s for s in all_sessions
+            if s.get("user_email", "pradhanviraj48@gmail.com").lower() == user_email
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -120,6 +109,7 @@ async def update_session_patient_name(
     """Update patient name in meta.json, index.json, and DB."""
     session_dir = SESSIONS_DIR / date_str / session_num
     meta_file = session_dir / "meta.json"
+    data_file = session_dir / "report_data.json"
     index_file = SESSIONS_DIR / "index.json"
 
     if not meta_file.exists():
@@ -157,7 +147,7 @@ async def update_session_patient_name(
             hip_png = session_dir / "hip_analysis_detailed.png"
             ankle_png = session_dir / "ankle_analysis_detailed.png"
 
-            generate_docx_report(
+            generate_docx_report(     
                 report_data=report_data,
                 out_path=str(report_docx),
                 comprehensive_png=str(comp_png) if comp_png.exists() else None,
@@ -183,30 +173,20 @@ async def update_session_patient_name(
         with open(index_file, "w", encoding="utf-8") as f:
             json.dump(index, f, indent=2)
 
-    # Update MongoDB jobs collection if matching session_id
+    # Update Supabase jobs table if matching session_id
     try:
-        await jobs_col().update_many(
-            {"session_id": f"{date_str}/{session_num}"},
-            {"$set": {"patient_name": new_patient_name}}
-        )
+        jobs_table().update({
+            "patient_name": new_patient_name
+        }).eq("session_id", f"{date_str}/{session_num}").execute()
     except Exception:
         pass
 
     return {"status": "success", "meta": meta}
 
 
-@app.delete("/api/sessions/{date_str}/{session_num}")
-@app.delete("/api/sessions/{session_id:path}")
-async def delete_session(date_str: str = None, session_num: str = None, session_id: str = None):
-    """Permanently delete a session directory, all its stored files, index record, and DB job entry."""
+async def _do_delete_session(full_session_id: str):
+    """Internal helper to delete a session by session_id."""
     import shutil
-
-    if date_str and session_num:
-        full_session_id = f"{date_str}/{session_num}"
-    elif session_id:
-        full_session_id = session_id
-    else:
-        raise HTTPException(status_code=400, detail="Invalid session identifier")
 
     parts = full_session_id.split("/")
     if len(parts) == 2:
@@ -222,7 +202,7 @@ async def delete_session(date_str: str = None, session_num: str = None, session_
             shutil.rmtree(session_dir)
             deleted_files = True
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to delete session files: {e}")
+            print(f"⚠ Failed to delete session files: {e}")
 
     # 2. Remove from index.json
     index_file = SESSIONS_DIR / "index.json"
@@ -238,16 +218,11 @@ async def delete_session(date_str: str = None, session_num: str = None, session_
         except Exception as e:
             print(f"⚠ Warning: Failed to update index.json on session delete: {e}")
 
-    # 3. Remove from MongoDB jobs collection
+    # 3. Remove from Supabase jobs table
     try:
-        await jobs_col().delete_many({
-            "$or": [
-                {"session_id": full_session_id},
-                {"_id": full_session_id}
-            ]
-        })
-    except Exception:
-        pass
+        jobs_table().delete().eq("session_id", full_session_id).execute()
+    except Exception as e:
+        print(f"⚠ Supabase delete error: {e}")
 
     # 4. Cleanup empty date dir if no sessions left
     if len(parts) == 2:
@@ -265,8 +240,21 @@ async def delete_session(date_str: str = None, session_num: str = None, session_
     }
 
 
+@app.delete("/api/sessions/{date_str}/{session_num}")
+async def delete_session_by_parts(
+    date_str: str, 
+    session_num: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Delete session specified by date and session number."""
+    return await _do_delete_session(f"{date_str}/{session_num}")
+
+
 @app.delete("/api/patients/{patient_id}")
-async def delete_patient(patient_id: str):
+async def delete_patient(
+    patient_id: str,
+    current_user: dict = Depends(get_current_user)
+):
     """Permanently delete all sessions associated with a patient."""
     import shutil
     index_file = SESSIONS_DIR / "index.json"
@@ -276,28 +264,46 @@ async def delete_patient(patient_id: str):
     with open(index_file, "r", encoding="utf-8") as f:
         index = json.load(f)
 
-    # Match patient by slugified name or exact patient_name
+    # Match patient by slugified name, exact patient_name, or URL unquoted string
+    target_clean = unquote(patient_id).strip().lower()
+    target_slug = target_clean.replace(" ", "-")
+
+    def normalize_patient(entry):
+        raw = (entry.get("patient_name") or "").strip()
+        if not raw or raw.lower() in ("unknown patient", "unassigned", "unknown"):
+            return "unassigned", "unassigned"
+        clean = raw.lower()
+        return clean, clean.replace(" ", "-")
+
     def is_match(entry):
-        p_name = entry.get("patient_name") or "Unassigned"
-        p_slug = p_name.lower().replace(" ", "-")
-        return p_slug == patient_id.lower() or p_name.lower() == patient_id.lower()
+        p_clean, p_slug = normalize_patient(entry)
+        if target_slug in ("unassigned", "unknown-patient", "unknown"):
+            return p_slug in ("unassigned", "unknown-patient", "unknown") or not (entry.get("patient_name") or "").strip()
+        return p_slug == target_slug or p_clean == target_clean or p_slug == target_clean
 
     to_delete = [entry for entry in index if is_match(entry)]
     remaining = [entry for entry in index if not is_match(entry)]
 
     deleted_count = 0
     for entry in to_delete:
-        session_id = entry.get("session_id")
-        if session_id:
-            date_part, session_part = session_id.split("/")
-            s_dir = SESSIONS_DIR / date_part / session_part
-            if s_dir.exists():
-                try:
-                    shutil.rmtree(s_dir)
-                except Exception:
-                    pass
+        s_id = entry.get("session_id")
+        if s_id:
+            parts = s_id.split("/")
+            if len(parts) == 2:
+                s_dir = SESSIONS_DIR / parts[0] / parts[1]
+                if s_dir.exists():
+                    try:
+                        shutil.rmtree(s_dir)
+                    except Exception:
+                        pass
+                date_dir = SESSIONS_DIR / parts[0]
+                if date_dir.exists() and not any(date_dir.iterdir()):
+                    try:
+                        date_dir.rmdir()
+                    except Exception:
+                        pass
             try:
-                await jobs_col().delete_many({"session_id": session_id})
+                jobs_table().delete().eq("session_id", s_id).execute()
             except Exception:
                 pass
             deleted_count += 1
@@ -311,4 +317,3 @@ async def delete_patient(patient_id: str):
 @app.get("/")
 def root():
     return {"message": "AquaGait API is running"}
-
